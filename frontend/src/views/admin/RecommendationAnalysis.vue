@@ -40,6 +40,17 @@
         </div>
       </div>
 
+      <div class="section-card" v-if="feedMetrics">
+        <h3>新首页 Feed 学习效果（近 {{ feedMetrics.days }} 天）</h3>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-value">{{ feedMetrics.exposedPairs }}</div><div class="stat-label">实际看见的用户-文章对</div></div>
+          <div class="stat-card"><div class="stat-value">{{ feedMetrics.clickedPairs }}</div><div class="stat-label">点击的用户-文章对</div></div>
+          <div class="stat-card highlight"><div class="stat-value">{{ feedMetrics.completedPairs }}</div><div class="stat-label">点击后 7 天内完读</div></div>
+          <div class="stat-card"><div class="stat-value">{{ Math.round(feedMetrics.completionPerClickRate * 100) }}%</div><div class="stat-label">点击后完读率</div></div>
+        </div>
+        <p class="metric-note">按用户与文章去重；曝光只在卡片实际进入视野时记录。点击不等于完成阅读。</p>
+      </div>
+
       <!-- 算法配置 -->
       <div class="section-card">
         <h3>算法配置</h3>
@@ -122,6 +133,7 @@ use([CanvasRenderer, BarChart, GridComponent, TooltipComponent])
 
 const loading = ref(false)
 const data = ref(null)
+const feedMetrics = ref(null)
 const error = ref('')
 
 const CONFIG_LABELS = {
@@ -167,7 +179,12 @@ const loadData = async () => {
   loading.value = true
   error.value = ''
   try {
-    const res = await request({ url: '/api/admin/metrics/recommendation', method: 'get' })
+    const [res, feedRes] = await Promise.all([
+      request({ url: '/api/admin/metrics/recommendation', method: 'get' }),
+      request({ url: '/api/admin/metrics/feed-learning', method: 'get', params: { days: 30 } })
+        .catch(() => null)
+    ])
+    feedMetrics.value = feedRes?.code === 200 ? feedRes.data : null
     if (res?.code === 200) {
       data.value = res.data
     } else {
@@ -204,6 +221,7 @@ onMounted(loadData)
 .stat-card.highlight .stat-value { color: #197fe6; }
 .stat-label { font-size: 12px; color: #64748b; margin-top: 4px; }
 .stat-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.metric-note { margin: 0; font-size: 12px; color: #64748b; }
 
 .section-card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
 .section-card h3 { font-size: 15px; font-weight: 700; color: #1e293b; margin: 0 0 16px; }

@@ -44,6 +44,18 @@
         <template #visual><XyMascot :size="90" /></template>
       </XyPageHeader>
 
+      <div v-if="selectedCategory === 'recommendation' && !isSearchMode" class="learning-actions">
+        <button v-if="continueReading" type="button" class="learning-action" @click="handleItemClick(continueReading)">
+          <span>继续阅读</span><strong>{{ continueReading.title }}</strong><small>{{ continueReading.reason }}</small>
+        </button>
+        <button v-if="reviewItem" type="button" class="learning-action" @click="handleItemClick(reviewItem)">
+          <span>知识点回顾</span><strong>{{ reviewItem.title }}</strong><small>{{ reviewItem.reason }}</small>
+        </button>
+        <button v-if="onboardingSuggested" type="button" class="learning-action onboarding-action" @click="router.push('/student/learning-agent')">
+          <span>让小芽更懂你</span><strong>告诉我你关心什么</strong><small>兴趣和学习目标会帮助我找到更合适的英文内容</small>
+        </button>
+      </div>
+
       <!-- Search Bar -->
       <div class="search-bar">
         <el-input
@@ -60,6 +72,17 @@
           <span v-else>找到 {{ searchTotal }} 篇文章（含全部文章）</span>
         </div>
       </div>
+
+      <section v-if="selectedCategory === 'recommendation' && !isSearchMode && externalSuggestions.length" class="external-explore">
+        <div class="external-heading"><strong>用英语发现世界</strong><span>站外英文原文 · 点击后离开本平台</span></div>
+        <div class="external-items">
+          <button v-for="item in externalSuggestions" :key="item.id" type="button" class="external-item" @click="openExternal(item)">
+            <span>{{ item.sourceName }} · {{ item.topic }}</span>
+            <strong>{{ item.title }}</strong>
+            <small>{{ item.reason }}</small>
+          </button>
+        </div>
+      </section>
 
       <!-- Articles Feed -->
       <div class="articles-feed">
@@ -97,6 +120,9 @@
             :key="item._type + '-' + item.id"
             class="article-card"
             :class="{ 'is-video': item._type === 'video' }"
+            :data-feed-id="item.feedSource ? item.id : undefined"
+            :data-feed-source="item.feedSource || undefined"
+            :data-feed-position="item.feedPosition"
             @click="handleItemClick(item)"
           >
             <!-- Image Header -->
@@ -129,6 +155,7 @@
             <div class="article-content">
               <h2 class="article-title">{{ item.title }}</h2>
               <p class="article-snippet">{{ getSnippet(item._type === 'video' ? item.description : item.content) }}</p>
+              <p v-if="item.reason" class="feed-reason">{{ item.reason }}</p>
               <p v-if="item.author" class="card-author">
                 {{ item.author.displayName }}
                 <span v-if="item.author.roleLabel && !item.author.official" class="card-author-role">{{ item.author.roleLabel }}</span>
@@ -149,6 +176,7 @@
                 <el-icon v-else :size="16"><View /></el-icon>
                 <span>{{ item._type === 'video' ? `${item.viewCount || 0} 次观看` : `${item.readingTime} min` }}</span>
               </div>
+              <button v-if="item.feedSource === 'FEED_FOR_YOU'" type="button" class="card-dismiss" @click.stop="hideItem(item)">不感兴趣</button>
             </div>
           </article>
         </template>
@@ -200,12 +228,14 @@ import {
 } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import { getFeaturedVideos } from '@/api/video'
-import { getRecommendedTexts, searchArticles } from '@/api/texts'
-import { recordRecommendationEvent } from '@/api/student'
+import { getArticleFeed, recordArticleFeedEvent, searchArticles } from '@/api/texts'
+import { getLearningAgentContentRecommendations } from '@/api/learningAgent'
+import { useUserStore } from '@/store/user'
 import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 import XyMascot from '@/components/ui/XyMascot.vue'
 
 const router = useRouter()
+const userStore = useUserStore()
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
 
 // ── Scroll Position & Data Cache (恢复滚动位置) ──
@@ -236,11 +266,18 @@ const saveScrollState = () => {
     sessionStorage.setItem(NAV_FLAG_KEY, '1')
     sessionStorage.setItem(CACHE_KEY, JSON.stringify({
       allItems: allItems.value,
-      recommendedArticles: recommendedArticles.value,
       selectedCategory: selectedCategory.value,
-      displayCount: displayCount.value,
       searchQuery: searchQuery.value,
-      shownRecommendedIds: shownRecommendedIds.value,
+      serverSearchResults: serverSearchResults.value,
+      searchTotal: searchTotal.value,
+      searchPage: searchPage.value,
+      feedSeed: feedSeed.value,
+      feedNextPage: feedNextPage.value,
+      feedHasMore: feedHasMore.value,
+      continueReading: continueReading.value,
+      reviewItem: reviewItem.value,
+      onboardingSuggested: onboardingSuggested.value,
+      externalSuggestions: externalSuggestions.value,
     }))
   } catch (e) { /* quota exceeded or private mode */ }
 }
@@ -254,11 +291,18 @@ const restoreScrollState = () => {
     // 如果缓存数据为空，不恢复，强制重新加载
     if (data.allItems.length === 0) return false
     allItems.value = data.allItems
-    recommendedArticles.value = data.recommendedArticles || []
-    selectedCategory.value = data.selectedCategory || ''
-    displayCount.value = data.displayCount || BATCH_SIZE
+    selectedCategory.value = data.selectedCategory ?? 'recommendation'
     searchQuery.value = data.searchQuery || ''
-    shownRecommendedIds.value = data.shownRecommendedIds || []
+    serverSearchResults.value = data.serverSearchResults || []
+    searchTotal.value = data.searchTotal || 0
+    searchPage.value = data.searchPage || 1
+    feedSeed.value = data.feedSeed || null
+    feedNextPage.value = data.feedNextPage || 1
+    feedHasMore.value = Boolean(data.feedHasMore)
+    continueReading.value = data.continueReading || null
+    reviewItem.value = data.reviewItem || null
+    onboardingSuggested.value = Boolean(data.onboardingSuggested)
+    externalSuggestions.value = Array.isArray(data.externalSuggestions) ? data.externalSuggestions : []
     return true
   } catch (e) { return false }
 }
@@ -323,51 +367,62 @@ const pullHintText = computed(() => {
 
 const loading = ref(true)
 const allItems = ref([])
-const recommendedArticles = ref([])
-const selectedCategory = ref('')
+const continueReading = ref(null)
+const reviewItem = ref(null)
+const onboardingSuggested = ref(false)
+const externalSuggestions = ref([])
+const selectedCategory = ref('recommendation')
 const filterVisible = ref(true)
 const loadError = ref(false)
-const currentPage = ref(1)
-const BATCH_SIZE = 10
-const displayCount = ref(BATCH_SIZE)
+const BATCH_SIZE = 12
+const feedSeed = ref(null)
+const feedNextPage = ref(1)
+const feedHasMore = ref(false)
+let feedRequestId = 0
 const loadingMore = ref(false)
 const sentinel = ref(null)
 let observer = null
+let cardObserver = null
+const seenImpressions = new Set()
 const searchQuery = ref('')
-const searchVisible = ref(false)
 // 服务端搜索结果（搜索全部已审核文章，不限精选）
 const serverSearchResults = ref([])
 const isSearching = ref(false)
 const searchTotal = ref(0)
+const searchPage = ref(1)
 let searchTimer = null
-// 本会话中已展示过的推荐文章 ID — 传给后端用于"换一批"时排除
-const shownRecommendedIds = ref([])
 
 
-const hasMore = computed(() => displayCount.value < filteredItems.value.length)
+const hasMore = computed(() => isSearchMode.value
+  ? serverSearchResults.value.length < searchTotal.value
+  : feedHasMore.value)
 
 // 是否处于搜索模式
 const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
 
 // 服务端搜索（防抖）
-const doServerSearch = async (keyword) => {
+const doServerSearch = async (keyword, page = 1) => {
   if (!keyword.trim()) {
     serverSearchResults.value = []
     searchTotal.value = 0
+    searchPage.value = 1
     isSearching.value = false
     return
   }
   isSearching.value = true
   try {
-    const res = await searchArticles(keyword.trim(), 1, 100)
+    const res = await searchArticles(keyword.trim(), page, 20)
     if (res?.code === 200 && res.data) {
-      serverSearchResults.value = (res.data.articles || []).map(text => ({
+      if (keyword.trim() !== searchQuery.value.trim()) return
+      const results = (res.data.articles || []).map(text => ({
         ...text,
         _type: 'article',
         coverGradient: getRandomGradient(),
         readingTime: Math.max(1, Math.ceil((text.content?.length || 0) / 800))
       }))
+      serverSearchResults.value = page === 1 ? results : [...serverSearchResults.value, ...results]
       searchTotal.value = res.data.total || 0
+      searchPage.value = page
     }
   } catch (e) {
     console.error('搜索文章失败:', e)
@@ -383,36 +438,18 @@ watch(searchQuery, (val) => {
   if (!kw) {
     serverSearchResults.value = []
     searchTotal.value = 0
-    displayCount.value = BATCH_SIZE
+    searchPage.value = 1
     return
   }
   searchTimer = setTimeout(() => {
-    displayCount.value = BATCH_SIZE
-    doServerSearch(kw)
+    doServerSearch(kw, 1)
   }, 400)
 })
 
 const filteredItems = computed(() => {
-  // 搜索模式：返回服务端搜索结果（全部已审核文章，不限精选）
-  if (isSearchMode.value) {
-    return serverSearchResults.value
-  }
-  if (selectedCategory.value === 'recommendation') {
-    return recommendedArticles.value
-  }
-  let result = allItems.value
-  if (selectedCategory.value) {
-    if (selectedCategory.value === 'video') {
-      result = result.filter(item => item._type === 'video')
-    } else {
-      result = result.filter(item => item.category === selectedCategory.value)
-    }
-  }
-  return result
+  return isSearchMode.value ? serverSearchResults.value : allItems.value
 })
-const articles = computed(() => {
-  return filteredItems.value.slice(0, displayCount.value)
-})
+const articles = computed(() => filteredItems.value)
 
 // 筛选栏开关
 const toggleFilter = () => {
@@ -421,8 +458,8 @@ const toggleFilter = () => {
 
 // Predefined categories based on design
 const categories = [
-  { label: '全部', value: '', icon: 'House' },
-  { label: '推荐', value: 'recommendation', icon: 'Star' },
+  { label: '为你', value: 'recommendation', icon: 'Star' },
+  { label: '发现', value: '', icon: 'House' },
   { label: '视频', value: 'video' },
   { label: '科技', value: 'technology', icon: 'Monitor' },
   { label: '商务', value: 'business', icon: 'TrendCharts' },
@@ -435,7 +472,7 @@ const categories = [
 // 当前选中分类的显示名称（折叠时在 header 中显示）
 const currentCategoryLabel = computed(() => {
   const cat = categories.find(c => c.value === selectedCategory.value)
-  return cat ? cat.label : '全部'
+  return cat ? cat.label : '为你'
 })
 
 // Cover gradient palettes (no external images)
@@ -458,26 +495,30 @@ const getRandomGradient = () => {
 
 const selectCategory = (val) => {
   selectedCategory.value = val
-  displayCount.value = BATCH_SIZE
-  if (val === 'recommendation') {
-    shownRecommendedIds.value = []
-    loadRecommended()
-  }
+  searchQuery.value = ''
+  allItems.value = []
+  feedSeed.value = null
+  loadFeed()
 }
 
-const loadMore = () => {
-  if (loadingMore.value || !hasMore.value) return
-  loadingMore.value = true
-  setTimeout(() => {
-    displayCount.value += BATCH_SIZE
-    loadingMore.value = false
-  }, 300)
+const loadMore = async () => {
+  if (loading.value || loadingMore.value || !hasMore.value) return
+  if (isSearchMode.value) {
+    loadingMore.value = true
+    try {
+      await doServerSearch(searchQuery.value.trim(), searchPage.value + 1)
+    } finally {
+      loadingMore.value = false
+    }
+    return
+  }
+  await loadFeed({ append: true })
 }
 
 const setupObserver = () => {
   if (observer) observer.disconnect()
   nextTick(() => {
-    if (!sentinel.value) return
+    if (!sentinel.value || typeof IntersectionObserver === 'undefined') return
     observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) loadMore()
     }, { root: pageMain.value, rootMargin: '200px' })
@@ -485,168 +526,157 @@ const setupObserver = () => {
   })
 }
 
-const toggleSearch = () => {
-  searchVisible.value = !searchVisible.value
-  if (!searchVisible.value) {
-    searchQuery.value = ''
-  }
-}
-
-const getRandomCategory = () => {
-  const cats = categories.filter(c => c.value !== '' && c.value !== 'video' && c.value !== 'recommendation' && c.value !== 'exam')
-  return cats[Math.floor(Math.random() * cats.length)].value
-}
-
-const COUNT_PER_BATCH = 5
-
-const mapRecommendedText = (text) => ({
+const mapFeedItem = (text, source = null) => ({
   ...text,
   _type: 'article',
-  category: 'recommendation',
+  content: text.excerpt || '',
   coverGradient: getRandomGradient(),
-  readingTime: Math.max(1, Math.ceil((text.content?.length || text.markdownContent?.length || 0) / 800))
+  readingTime: text.estimatedMinutes || 1,
+  feedSource: source,
+  feedPosition: text.position || 0
 })
 
-// A refresh must change the first visible article whenever the server has
-// another candidate.  This also covers deployments where an intermediary or
-// an older backend ignores the exclude query parameter.
 const rotateFreshFirst = (items, previousIds) => {
   if (!Array.isArray(items) || items.length < 2 || !Array.isArray(previousIds) || previousIds.length === 0) {
     return items
   }
   const previousSet = new Set(previousIds.map(id => String(id)))
-  const freshIndex = items.findIndex(item => item?.id != null && !previousSet.has(String(item.id)))
+  const freshIndex = items.findIndex(item => item?._type === 'article' && item?.id != null && !previousSet.has(String(item.id)))
   if (freshIndex > 0) {
     return [items[freshIndex], ...items.slice(0, freshIndex), ...items.slice(freshIndex + 1)]
   }
-  // All candidates were shown already.  Still rotate the feed so the button
-  // has a visible effect instead of appearing to do nothing.
-  if (freshIndex < 0) return [...items.slice(1), items[0]]
+  if (freshIndex < 0) {
+    const articleIndices = items.map((item, index) => item?._type === 'article' ? index : -1).filter(index => index >= 0)
+    if (articleIndices.length < 2) return items
+    const rotated = [...items]
+    const [first, second] = articleIndices
+    ;[rotated[first], rotated[second]] = [rotated[second], rotated[first]]
+    return rotated
+  }
   return items
 }
 
-const loadRecommended = async ({ resetExclusions = false } = {}) => {
-  const previousVisibleIds = recommendedArticles.value
-    .slice(0, COUNT_PER_BATCH)
-    .map(item => item?.id)
-    .filter(id => id != null)
-  loading.value = true
-  loadError.value = false
+const mapVideo = (video) => ({
+  ...video,
+  _type: 'video',
+  category: 'video',
+  coverGradient: getRandomGradient()
+})
+
+const loadExternalSuggestions = async () => {
+  if (!['STUDENT', 'USER'].includes(userStore.userRole)) return
   try {
-    if (resetExclusions) {
-      shownRecommendedIds.value = []
-    }
-    let data = await getRecommendedTexts(COUNT_PER_BATCH, shownRecommendedIds.value)
-    if (data?.code === 200) {
-      let list = Array.isArray(data.data) ? data.data : []
-      // 如果返回空且已有排除列表，重置排除列表重新拉取
-      if (list.length === 0 && shownRecommendedIds.value.length > 0) {
-        shownRecommendedIds.value = []
-        data = await getRecommendedTexts(COUNT_PER_BATCH, [])
-        list = Array.isArray(data.data) ? data.data : []
-      }
-      recommendedArticles.value = rotateFreshFirst(list.map(mapRecommendedText), resetExclusions ? [] : previousVisibleIds)
-      // 记录本次展示的 ID
-      list.forEach(t => {
-        if (t?.id != null && !shownRecommendedIds.value.includes(t.id)) {
-          shownRecommendedIds.value.push(t.id)
-        }
-      })
-      // 推荐曝光埋点
-      if (list.length > 0) recordRecommendationEvent('RECOMMENDATION_VIEW', null)
-    } else {
-      loadError.value = true
-    }
-  } catch (err) {
-    console.error('加载推荐失败:', err)
-    loadError.value = true
-    recommendedArticles.value = []
-  } finally {
-    loading.value = false
+    const result = await getLearningAgentContentRecommendations(6)
+    externalSuggestions.value = result?.code === 200 && Array.isArray(result.data)
+      ? result.data.filter(item => item.external && /^https:\/\//.test(item.url || '')).slice(0, 2)
+      : []
+  } catch {
+    externalSuggestions.value = []
   }
 }
 
-const loadFeed = async ({ forceRefresh = false } = {}) => {
-  const previousVisibleArticleIds = forceRefresh
-    ? allItems.value.filter(item => item?._type === 'article').slice(0, COUNT_PER_BATCH).map(item => item?.id).filter(id => id != null)
+const openExternal = (item) => {
+  if (item?.external && /^https:\/\//.test(item.url || '')) {
+    window.open(item.url, '_blank', 'noopener,noreferrer')
+  }
+}
+
+const loadFeed = async ({ forceRefresh = false, append = false } = {}) => {
+  const requestId = ++feedRequestId
+  if (append) loadingMore.value = true
+  else loading.value = true
+  if (!append) loadError.value = false
+  const oldFirstIds = forceRefresh
+    ? allItems.value.filter(item => item._type === 'article').slice(0, 5).map(item => item.id)
     : []
-  loading.value = true
-  loadError.value = false
   try {
-    const authHeader = getAuthHeader()
-    const headers = authHeader ? { Authorization: authHeader } : {}
-
-    const previousIds = previousVisibleArticleIds
-    const params = new URLSearchParams()
-    if (forceRefresh) {
-      params.set('refresh', 'true')
-      params.set('_', String(Date.now()))
-      if (previousIds.length > 0) params.set('exclude', previousIds.join(','))
+    if (selectedCategory.value === 'video') {
+      const res = await getFeaturedVideos({ count: 30 })
+      if (requestId !== feedRequestId) return
+      allItems.value = res?.code === 200 ? (res.data || []).map(mapVideo) : []
+      feedHasMore.value = false
+      return
     }
-    const query = params.toString() ? `?${params.toString()}` : ''
-    const [articlesRes, videosRes] = await Promise.all([
-      fetch(`${apiBase}/api/public/texts/featured${query}`, {
-        headers: { ...headers, 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
-        cache: 'no-store'
-      }).then(r => r.json()),
-      getFeaturedVideos({}).catch(() => ({ code: 0, data: [] }))
-    ])
-
-    let articleItems = []
-    if (articlesRes?.code === 200) {
-      articleItems = (Array.isArray(articlesRes.data) ? articlesRes.data : []).map(text => {
-        const cat = text.category || getRandomCategory()
-        const contentLength = typeof text.content === 'string' && text.content.length > 0
-          ? text.content.length
-          : (typeof text.markdownContent === 'string' ? text.markdownContent.length : 0)
-        return {
-          ...text,
-          _type: 'article',
-          category: cat,
-          coverGradient: getRandomGradient(),
-          readingTime: Math.max(1, Math.ceil(contentLength / 800))
-        }
+    const mode = selectedCategory.value === 'recommendation' ? 'FOR_YOU' : 'EXPLORE'
+    const category = mode === 'EXPLORE' && selectedCategory.value ? selectedCategory.value : undefined
+    const source = mode === 'FOR_YOU' ? 'FEED_FOR_YOU' : category ? 'FEED_CATEGORY' : 'FEED_EXPLORE'
+    const params = {
+      mode,
+      category,
+      page: append ? feedNextPage.value : 1,
+      size: BATCH_SIZE,
+      seed: append ? feedSeed.value : forceRefresh ? Date.now() : undefined,
+      exclude: forceRefresh && mode === 'FOR_YOU' && oldFirstIds.length ? oldFirstIds.join(',') : undefined
+    }
+    let res = await getArticleFeed(params)
+    if (requestId !== feedRequestId) return
+    if (res?.code !== 200 || !res.data) throw new Error('Feed 接口未返回有效数据')
+    if (!append && params.exclude && (res.data.items || []).length === 0) {
+      res = await getArticleFeed({ ...params, exclude: undefined })
+      if (requestId !== feedRequestId) return
+      if (res?.code !== 200 || !res.data) throw new Error('Feed 刷新失败')
+    }
+    const data = res.data
+    feedSeed.value = data.seed
+    feedNextPage.value = data.nextPage
+    feedHasMore.value = Boolean(data.hasMore)
+    if (!append) {
+      continueReading.value = data.continueReading ? mapFeedItem(data.continueReading) : null
+      reviewItem.value = data.review ? mapFeedItem(data.review) : null
+      onboardingSuggested.value = Boolean(data.onboardingSuggested)
+    }
+    let items = (data.items || []).map(item => mapFeedItem(item, source))
+    if (!append && !category) {
+      const videosRes = await getFeaturedVideos({ count: 2 }).catch(() => null)
+      if (requestId !== feedRequestId) return
+      const videos = videosRes?.code === 200 ? (videosRes.data || []).map(mapVideo) : []
+      const merged = []
+      items.forEach((item, index) => {
+        merged.push(item)
+        if ((index + 1) % 3 === 0 && videos.length) merged.push(videos.shift())
       })
+      items = [...merged, ...videos]
     }
-
-    let videoItems = []
-    if (videosRes?.code === 200) {
-      videoItems = (Array.isArray(videosRes.data) ? videosRes.data : []).map(v => ({
-        ...v,
-        _type: 'video',
-        category: 'video',
-        coverGradient: getRandomGradient()
-      }))
-    }
-
-    // 手动刷新时即使接口顺序未变化，也轮换文章首屏，确保用户看到新的文章。
-    if (forceRefresh) {
-      articleItems = rotateFreshFirst(articleItems, previousVisibleArticleIds)
-    }
-
-    // Interleave: every 3 articles insert a video
-    const merged = []
-    let vi = 0
-    articleItems.forEach((a, i) => {
-      merged.push(a)
-      if ((i + 1) % 3 === 0 && vi < videoItems.length) {
-        merged.push(videoItems[vi++])
-      }
-    })
-    while (vi < videoItems.length) merged.push(videoItems[vi++])
-
-    // 空响应不能清空当前列表，避免接口短暂异常让已读文章消失。
-    if (merged.length > 0) {
-      allItems.value = merged
-    } else if (allItems.value.length === 0) {
-      loadError.value = true
-    }
+    if (forceRefresh) items = rotateFreshFirst(items, oldFirstIds)
+    allItems.value = append ? [...allItems.value, ...items] : items
   } catch (error) {
-    console.error('加载推荐内容失败:', error)
-    // 保留已有文章，失败时只显示错误状态，不删除当前列表。
+    if (requestId !== feedRequestId) return
+    console.error('加载文章 Feed 失败:', error)
     if (allItems.value.length === 0) loadError.value = true
   } finally {
-    loading.value = false
+    if (requestId === feedRequestId) {
+      if (append) loadingMore.value = false
+      else loading.value = false
+    }
+  }
+}
+
+const setupCardObserver = () => {
+  if (cardObserver) cardObserver.disconnect()
+  if (!pageMain.value || typeof IntersectionObserver === 'undefined') return
+  cardObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting || entry.intersectionRatio < 0.5) return
+      const { feedId, feedSource, feedPosition } = entry.target.dataset
+      const key = `${feedSource}:${feedId}`
+      if (feedId && feedSource && !seenImpressions.has(key)) {
+        seenImpressions.add(key)
+        recordArticleFeedEvent({ textId: Number(feedId), eventType: 'IMPRESSION',
+          source: feedSource, position: Number(feedPosition) || 0 }).catch(() => {})
+      }
+      cardObserver?.unobserve(entry.target)
+    })
+  }, { root: pageMain.value, threshold: 0.5 })
+  pageMain.value.querySelectorAll('.article-card[data-feed-id]').forEach(card => cardObserver.observe(card))
+}
+
+watch(articles, () => nextTick(setupCardObserver), { flush: 'post' })
+
+const hideItem = (item) => {
+  allItems.value = allItems.value.filter(candidate => !(candidate.id === item.id && candidate._type === 'article'))
+  if (item.feedSource) {
+    recordArticleFeedEvent({ textId: item.id, eventType: 'DISMISS',
+      source: item.feedSource, position: item.feedPosition || 0 }).catch(() => {})
   }
 }
 
@@ -661,9 +691,9 @@ const handleItemClick = (item) => {
     console.warn('readArticle: 文章ID不存在', item)
     return
   }
-  // 推荐点击埋点
-  if (selectedCategory.value === 'recommendation') {
-    recordRecommendationEvent('RECOMMENDATION_CLICK', item.id)
+  if (item.feedSource) {
+    recordArticleFeedEvent({ textId: item.id, eventType: 'CLICK',
+      source: item.feedSource, position: item.feedPosition || 0 }).catch(() => {})
   }
   // 验证 ID 是否为有效数字
   const numericId = typeof item.id === 'number' ? item.id : parseInt(item.id, 10)
@@ -754,22 +784,26 @@ onMounted(() => {
     const restored = restoreScrollState()
     if (restored) {
       loading.value = false
+      if (externalSuggestions.value.length === 0) loadExternalSuggestions()
       nextTick(() => {
         restoreScrollPosition()
         setupObserver()
+        setupCardObserver()
       })
       return
     }
   }
   // 首次加载 / 浏览器刷新 / 无缓存：清除旧缓存并请求新数据
   clearCache()
-  loadFeed({ forceRefresh: true })
+  loadFeed()
+  loadExternalSuggestions()
   setupObserver()
 })
 
 // keep-alive 激活时：浏览器不保留 detach/reattach 后的滚动位置，需手动恢复
 onActivated(() => {
   setupObserver()
+  nextTick(setupCardObserver)
   // 重新绑定 scroll 追踪
   if (pageMain.value) pageMain.value.addEventListener('scroll', trackScroll, { passive: true })
 
@@ -794,6 +828,7 @@ onActivated(() => {
 // 正确的保存时机是 onBeforeRouteLeave（DOM 还在时）和 trackScroll（实时节流保存）
 onDeactivated(() => {
   if (observer) observer.disconnect()
+  if (cardObserver) cardObserver.disconnect()
 })
 
 // 离开页面前保存滚动位置和已加载数据
@@ -866,19 +901,14 @@ const onTouchEnd = async () => {
 
 const doRefresh = async () => {
   if (loading.value) return
-  // 重置分页
-  displayCount.value = BATCH_SIZE
-  if (selectedCategory.value === 'recommendation') {
-    recordRecommendationEvent('RECOMMENDATION_REFRESH', null)
-    // 保留本次会话已展示的文章 ID，确保手动刷新获取下一批；候选耗尽时由 loadRecommended 自动重置。
-    await loadRecommended({ resetExclusions: false })
-  } else {
-    await loadFeed({ forceRefresh: true })
-  }
+  if (isSearchMode.value) await doServerSearch(searchQuery.value.trim(), 1)
+  else await loadFeed({ forceRefresh: true })
 }
 
 onBeforeUnmount(() => {
   if (observer) observer.disconnect()
+  if (cardObserver) cardObserver.disconnect()
+  if (searchTimer) clearTimeout(searchTimer)
   if (pullGestureTarget) {
     pullGestureTarget.removeEventListener('touchstart', onTouchStart)
     pullGestureTarget.removeEventListener('touchmove', onTouchMove)
@@ -986,6 +1016,21 @@ onBeforeUnmount(() => {
 
 .articles-intro { margin: 16px 12px 2px; }
 @media (min-width: 768px) { .articles-intro { margin: 20px 0 6px; } }
+
+.learning-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; padding: 12px; }
+.learning-action { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 14px 16px; border: 1px solid var(--xy-border); border-radius: 16px; background: var(--xy-surface); color: var(--xy-ink); text-align: left; cursor: pointer; }
+.learning-action span { color: var(--xy-brand-700); font-size: 12px; font-weight: 700; }
+.learning-action strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.learning-action small { color: var(--xy-ink-muted); font-size: 12px; }
+.onboarding-action { background: var(--xy-brand-50); }
+.external-explore { margin: 12px; padding: 15px; border: 1px solid var(--xy-border); border-radius: 16px; background: var(--xy-surface); }
+.external-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 10px; }
+.external-heading strong { font-size: 15px; color: var(--xy-ink); }
+.external-heading span { font-size: 11px; color: var(--xy-ink-muted); }
+.external-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; }
+.external-item { display: flex; flex-direction: column; gap: 5px; min-width: 0; border: 1px solid var(--xy-border); border-radius: 11px; padding: 11px; background: var(--xy-canvas); text-align: left; cursor: pointer; }
+.external-item span, .external-item small { color: var(--xy-ink-muted); font-size: 11px; }
+.external-item strong { color: var(--xy-ink); font-size: 13px; line-height: 1.4; }
 
 
 .header-actions {
@@ -1250,6 +1295,8 @@ onBeforeUnmount(() => {
   height: calc(2 * 1.5em);
 }
 
+.feed-reason { margin: 9px 0 0; color: var(--xy-brand-700); font-size: 12px; line-height: 1.4; }
+
 .card-author {
   margin: 8px 0 0;
   font-size: 12px;
@@ -1273,7 +1320,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
+
+.card-dismiss { border: 0; background: transparent; color: var(--xy-ink-muted); font-size: 11px; cursor: pointer; white-space: nowrap; }
 
 .difficulty-pill {
   display: flex;

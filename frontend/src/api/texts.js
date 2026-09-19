@@ -1,5 +1,14 @@
 import request from '@/utils/request'
 
+/** Personalized or exploratory article feed; returns metadata, never full bodies. */
+export function getArticleFeed(params = {}) {
+  return request({ url: '/api/feed/articles', method: 'get', params })
+}
+
+export function recordArticleFeedEvent(data) {
+  return request({ url: '/api/feed/events', method: 'post', data })
+}
+
 /**
  * 获取个性化推荐文章（需登录，USER/STUDENT 角色）
  *
