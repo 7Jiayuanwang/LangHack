@@ -298,6 +298,21 @@
           <XyMascot :size="56" />
           <h2>这篇读完了，做得好！</h2>
           <p>你完成了一篇 {{ wordCount }} 词的阅读。接下来可以用英语向小芽复述印象最深的一段。</p>
+          <div class="article-insights" aria-label="小芽文章知识点">
+            <strong>小芽为你挑选的知识点 <span v-if="articleInsight.targetLevel">· {{ insightLevelLabel(articleInsight.targetLevel) }}</span></strong>
+            <p v-if="articleInsight.levelReason" class="insight-reason">{{ articleInsight.levelReason }}</p>
+            <p v-if="articleInsight.status === 'PENDING'">小芽正在整理这篇文章，知识点准备好后会出现在这里和未读消息中。</p>
+            <template v-else-if="articleInsight.status === 'READY'">
+              <article v-for="(point, index) in articleInsight.points" :key="index" class="insight-point">
+                <span>{{ insightTypeLabel(point.type) }}</span>
+                <h3>{{ point.expression }}</h3>
+                <p>{{ point.explanation }}</p>
+                <blockquote>{{ point.sourceSentence }}</blockquote>
+                <small>{{ point.practiceTip }}</small>
+              </article>
+            </template>
+            <p v-else-if="articleInsight.status === 'UNAVAILABLE'">{{ articleInsight.message || '暂时无法提炼知识点' }} <button type="button" @click="retryArticleInsights">重试</button></p>
+          </div>
           <div class="completion-actions">
             <button type="button" @click="scrollToReaderTop">再读一遍</button>
             <button type="button" class="completion-primary" @click="openArticleConversation">和小芽聊聊</button>
@@ -602,6 +617,7 @@ import { toggleSentenceFavorite } from '@/api/sentenceFavorite'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
 import XyMascot from '@/components/ui/XyMascot.vue'
+import { getArticleLearningInsights } from '@/api/learningAgent'
 
 const route = useRoute()
 const router = useRouter()
@@ -695,6 +711,37 @@ const timeBasedProgress = computed(() => Math.min(
   Math.round(studyTime.value * 100 / (requiredStudyMinutes.value * 60))
 ))
 const isCompleted = ref(false)
+const articleInsight = ref({ status: 'PENDING', points: [] })
+let articleInsightPollTimer = null
+let articleInsightPollCount = 0
+const insightLevelLabel = (level) => ({ CET4: '四级', CET6: '六级', POSTGRADUATE: '考研' })[level] || level
+const insightTypeLabel = (type) => ({ VOCABULARY: '词汇', GRAMMAR: '语法', SENTENCE: '句型' })[type] || '知识点'
+const loadArticleInsights = async () => {
+  if (!isCompleted.value || !textId.value) return
+  const requestedTextId = textId.value
+  try {
+    const response = await getArticleLearningInsights(requestedTextId)
+    if (String(requestedTextId) !== String(textId.value)) return
+    if (response?.code === 200 && response.data) {
+      articleInsight.value = response.data
+      if (response.data.status === 'READY') {
+        window.dispatchEvent(new Event('langhack:agent-messages-changed'))
+      } else if (response.data.status === 'PENDING' && articleInsightPollCount < 8) {
+        articleInsightPollCount += 1
+        articleInsightPollTimer = setTimeout(loadArticleInsights, 2000)
+      }
+    } else {
+      articleInsight.value = { status: 'UNAVAILABLE', message: response?.message || '暂时无法读取知识点', points: [] }
+    }
+  } catch {
+    articleInsight.value = { status: 'UNAVAILABLE', message: '网络暂时不可用，稍后重试', points: [] }
+  }
+}
+const retryArticleInsights = () => {
+  articleInsightPollCount = 0
+  if (articleInsightPollTimer) clearTimeout(articleInsightPollTimer)
+  loadArticleInsights()
+}
 const isFavorite = ref(false)
 const favoriteCount = ref(0)
 const isLiked = ref(false)
@@ -1015,6 +1062,7 @@ const loadTextDetail = async () => {
       learningProgress.value = data.learningProgress || 0
       learnedWordsCount.value = data.learnedWordsCount || 0
       isCompleted.value = data.isCompleted || false
+      if (isCompleted.value) loadArticleInsights()
 
       // 权限和标记位
       isPublic.value = data.isPublic || 0
@@ -1524,18 +1572,22 @@ const handleCompleteReading = async () => {
         recording.value = false
         stopStudyTimer()
         ElMessage.success('恭喜！阅读已标记为完成')
+        articleInsightPollCount = 0
+        loadArticleInsights()
       } else {
         ElMessage.error('完成阅读失败')
         return
       }
     } else {
-      // 容错路径：直接调用 markTextCompleted 接口
-      const response = await studentApi.markTextCompleted(textId.value, assignmentId.value)
+      // 容错路径：直接按文章标记完成，并保留实际阅读版本。
+      const response = await studentApi.markTextAsCompleted(textId.value, assignmentId.value, currentVersion.value)
       if (response.code === 200) {
         isCompleted.value = true
         recording.value = false
         stopStudyTimer()
         ElMessage.success('恭喜！阅读已标记为完成')
+        articleInsightPollCount = 0
+        loadArticleInsights()
       } else {
         ElMessage.error('完成阅读失败')
         return
@@ -1953,6 +2005,9 @@ watch(() => route.params.id, (newId, oldId) => {
     relatedTexts.value = []
     quizQuestions.value = []
     isCompleted.value = false
+    articleInsight.value = { status: 'PENDING', points: [] }
+    articleInsightPollCount = 0
+    if (articleInsightPollTimer) clearTimeout(articleInsightPollTimer)
     companionDismissed.value = false
     companionInviteVisible.value = false
     companionPromptSeen.value = false
@@ -2193,6 +2248,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (articleInsightPollTimer) clearTimeout(articleInsightPollTimer)
   if (companionInviteTimerId) clearTimeout(companionInviteTimerId)
   companionInviteTimerId = null
   saveReaderPosition()
@@ -3561,6 +3617,17 @@ const applyHighlightByOffset = (container, searchText, startOffset, highlightCla
 .completion-card :deep(.xy-mascot) { margin: 0 auto 8px; }
 .completion-card h2 { margin: 0 0 8px; color: var(--xy-ink); font-size: 22px; }
 .completion-card p { margin: 0 auto 18px; max-width: 38em; color: var(--xy-ink-muted); line-height: 1.6; }
+.article-insights { margin: 18px auto 20px; max-width: 620px; padding: 18px; border: 1px solid #d5eadf; border-radius: 16px; background: #f6fbf8; text-align: left; }
+.article-insights > strong { display: block; margin-bottom: 8px; color: #166749; font-size: 17px; }
+.article-insights .insight-reason { margin: 0 0 12px; font-size: 13px; }
+.article-insights > p { margin: 8px 0; }
+.article-insights > p button { border: 0; background: none; color: #148258; font-weight: 700; cursor: pointer; }
+.insight-point { padding: 12px 0; border-top: 1px solid #dcece3; }
+.insight-point > span { display: inline-block; padding: 2px 8px; border-radius: 12px; background: #e0f3e7; color: #186848; font-size: 11px; font-weight: 700; }
+.insight-point h3 { margin: 6px 0; color: #245b43; font-size: 16px; }
+.insight-point p { margin: 0 0 8px; }
+.insight-point blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid #65bd8a; background: white; color: #425d4c; font-size: 13px; line-height: 1.5; }
+.insight-point small { color: #4b7960; line-height: 1.5; }
 .completion-actions { display: flex; justify-content: center; gap: 10px; }
 .completion-actions button { min-height: 44px; padding: 0 16px; border: 1px solid var(--xy-border); border-radius: var(--xy-radius-sm); background: white; color: var(--xy-ink); font-weight: 700; cursor: pointer; }
 .completion-actions .completion-primary { border: 0; background: var(--xy-gradient-brand); color: white; }

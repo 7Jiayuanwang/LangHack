@@ -13,6 +13,15 @@ export const getLearningAgentContentRecommendations = (count = 6) =>
 export const getLearningAgentStudyLoop = () =>
   request({ url: '/api/student/agent/study-loop', method: 'get' })
 
+export const getArticleLearningInsights = (textId) =>
+  request({ url: `/api/student/agent/article-insights/${textId}`, method: 'get' })
+
+export const getUnreadArticleInsights = () =>
+  request({ url: '/api/student/agent/article-insights/unread', method: 'get' })
+
+export const markArticleInsightRead = (messageId) =>
+  request({ url: `/api/student/agent/article-insights/messages/${messageId}/read`, method: 'post' })
+
 // Only invoked after the student explicitly submits a visible draft for feedback.
 export const requestWritingFeedback = (draft) =>
   request({

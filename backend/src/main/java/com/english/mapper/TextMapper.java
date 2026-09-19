@@ -4,10 +4,14 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.english.entity.Text;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface TextMapper extends BaseMapper<Text> {
+
+    @Select("SELECT title FROM texts WHERE id = #{textId} AND deleted = 0")
+    String selectActiveTitleById(@Param("textId") Long textId);
 
     /**
      * 软删除指定单元下所有未删除的课文（绕过 @TableLogic 的 SELECT 过滤）

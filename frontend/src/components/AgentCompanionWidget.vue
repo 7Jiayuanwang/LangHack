@@ -62,13 +62,14 @@
           <button type="button" @click="refreshUnread">刷新</button>
         </div>
         <p v-if="notifications.length === 0" class="empty-messages">暂时没有待读消息。继续保持好奇心，今天也和英语见个面吧！</p>
-        <article v-for="item in notifications" :key="item.id" class="message-card">
-          <button type="button" class="message-title" :aria-expanded="selectedMessageId === item.id" @click="selectedMessageId = selectedMessageId === item.id ? null : item.id">
-            <span>{{ item.title }}</span><span aria-hidden="true">{{ selectedMessageId === item.id ? '−' : '+' }}</span>
+        <article v-for="item in notifications" :key="`${item.source}:${item.id}`" class="message-card">
+          <button type="button" class="message-title" :aria-expanded="selectedMessageId === `${item.source}:${item.id}`" @click="selectedMessageId = selectedMessageId === `${item.source}:${item.id}` ? null : `${item.source}:${item.id}`">
+            <span>{{ item.title }}</span><span aria-hidden="true">{{ selectedMessageId === `${item.source}:${item.id}` ? '−' : '+' }}</span>
           </button>
-          <template v-if="selectedMessageId === item.id">
+          <template v-if="selectedMessageId === `${item.source}:${item.id}`">
             <p>{{ item.content }}</p>
-            <button type="button" class="mark-read" @click="markRead(item.id)">我已读过</button>
+            <button v-if="item.textId" type="button" class="message-article-link" @click="navigate(`/article/${item.textId}`)">回到这篇文章</button>
+            <button type="button" class="mark-read" @click="markRead(item)">我已读过</button>
           </template>
         </article>
       </div>
@@ -94,6 +95,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getUnreadNotifications, markNotificationRead } from '@/api/notification'
+import { getUnreadArticleInsights, markArticleInsightRead } from '@/api/learningAgent'
 import AgentMascot from '@/components/AgentMascot.vue'
 
 // The full chat interface is loaded only when the student first opens 小芽.
@@ -120,8 +122,16 @@ let refreshTimer = null
 const refreshUnread = async () => {
   if (!visible.value) return
   try {
-    const response = await getUnreadNotifications()
-    if (response?.code === 200) notifications.value = Array.isArray(response.data) ? response.data : []
+    const [globalResult, insightResult] = await Promise.allSettled([
+      getUnreadNotifications(), getUnreadArticleInsights()
+    ])
+    const globalMessages = globalResult.status === 'fulfilled' && globalResult.value?.code === 200
+      ? (Array.isArray(globalResult.value.data) ? globalResult.value.data : []).map(item => ({ ...item, source: 'global' }))
+      : notifications.value.filter(item => item.source === 'global')
+    const insightMessages = insightResult.status === 'fulfilled' && insightResult.value?.code === 200
+      ? (Array.isArray(insightResult.value.data) ? insightResult.value.data : []).map(item => ({ ...item, source: 'insight' }))
+      : notifications.value.filter(item => item.source === 'insight')
+    notifications.value = [...insightMessages, ...globalMessages]
   } catch {
     // A temporary notification failure must not interrupt reading or chat.
   }
@@ -156,11 +166,13 @@ const openMessages = () => {
   refreshUnread()
 }
 
-const markRead = async (id) => {
+const markRead = async (item) => {
   try {
-    const response = await markNotificationRead(id)
+    const response = item.source === 'insight'
+      ? await markArticleInsightRead(item.id)
+      : await markNotificationRead(item.id)
     if (response?.code === 200) {
-      notifications.value = notifications.value.filter(item => item.id !== id)
+      notifications.value = notifications.value.filter(candidate => candidate.source !== item.source || candidate.id !== item.id)
       selectedMessageId.value = null
     }
   } catch {
@@ -218,12 +230,14 @@ watch(() => route.fullPath, () => {
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   document.addEventListener('keydown', onKeyDown)
+  window.addEventListener('langhack:agent-messages-changed', refreshUnread)
 })
 
 onUnmounted(() => {
   stopRefreshing()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   document.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('langhack:agent-messages-changed', refreshUnread)
 })
 </script>
 
@@ -261,6 +275,7 @@ onUnmounted(() => {
 .message-title { display: flex; justify-content: space-between; width: 100%; border: 0; background: none; color: #245d48; font-weight: 700; text-align: left; cursor: pointer; }
 .message-card p { margin: 10px 0; color: #526b5d; font-size: 13px; line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
 .mark-read { padding: 6px 12px; border: 0; border-radius: 8px; background: #e4f5eb; color: #137e54; font-weight: 700; cursor: pointer; }
+.message-article-link { margin-right: 8px; padding: 6px 12px; border: 0; border-radius: 8px; background: #eaf3ff; color: #315e9b; font-weight: 700; cursor: pointer; }
 .is-immersive .companion-launcher { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
 .is-immersive .companion-panel { bottom: calc(114px + env(safe-area-inset-bottom, 0px)); height: min(620px, calc(100dvh - 138px)); }
 .is-chat-page .companion-launcher { top: calc(70px + env(safe-area-inset-top, 0px)); bottom: auto; }

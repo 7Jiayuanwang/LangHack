@@ -35,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 import com.english.util.TextEncodingRepair;
+import com.english.service.impl.ArticleInsightService;
 
 /**
  * 学生学习控制器
@@ -80,6 +81,9 @@ public class StudentLearningController {
 
     @Autowired
     private TextLearningRecordMapper textLearningRecordMapper;
+
+    @Autowired
+    private ArticleInsightService articleInsightService;
 
     @Autowired
     private WordNetService wordNetService;
@@ -522,6 +526,7 @@ public class StudentLearningController {
             }
             logger.info("完成阅读课文调用: recordId={}, studentId={}", recordId, studentId);
             learningRecordsService.completeReadingSession(recordId);
+            articleInsightService.requestAfterCompletion(studentId, record.getTextId());
             return Result.success("阅读已完成");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
@@ -540,6 +545,7 @@ public class StudentLearningController {
     public Result<Map<String, Object>> markTextAsCompleted(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
+            @RequestParam(required = false) String contentVersion,
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -576,6 +582,7 @@ public class StudentLearningController {
                         ? java.time.Duration.between(record.getStartTime(), now).getSeconds() : 0;
                 record.setDurationSeconds((int) Math.min(duration, Integer.MAX_VALUE));
                 record.setUpdatedTime(now);
+                if (contentVersion != null && !contentVersion.isBlank()) record.setContentVersion(contentVersion);
                 textLearningRecordMapper.updateById(record);
             } else {
                 // 没有未完成记录，创建一条已完成的记录
@@ -589,12 +596,15 @@ public class StudentLearningController {
                 record.setDurationSeconds(0);
                 record.setCreatedTime(now);
                 record.setUpdatedTime(now);
+                record.setContentVersion(contentVersion);
                 textLearningRecordMapper.insert(record);
             }
 
             Map<String, Object> result = new HashMap<>();
             result.put("message", "课文已标记为完成");
             result.put("recordId", record.getId());
+
+            articleInsightService.requestAfterCompletion(studentId, textId);
 
             return Result.success(result);
         } catch (BusinessException e) {
