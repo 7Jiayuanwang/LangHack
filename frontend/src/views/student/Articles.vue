@@ -1462,7 +1462,7 @@ onBeforeUnmount(() => {
 .fab-refresh {
   position: fixed;
   right: 20px;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px)); /* 避开底部导航栏 */
+  bottom: calc(140px + env(safe-area-inset-bottom, 0px)); /* 避开底部导航栏 + 小芽按钮 */
   z-index: 60;
   width: 52px;
   height: 52px;

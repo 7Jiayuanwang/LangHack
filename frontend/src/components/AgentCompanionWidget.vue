@@ -75,12 +75,14 @@
     </section>
 
     <button
+      ref="launcherRef"
       type="button"
       class="companion-launcher"
+      :style="launcherStyle"
       :aria-label="unreadCount ? `打开小芽，有 ${unreadCount} 条未读消息` : '打开小芽，开始英语学习对话'"
       aria-controls="agent-companion-panel"
       :aria-expanded="expanded"
-      @click="togglePanel"
+      @pointerdown="onDragStart"
     >
       <AgentMascot :size="62" />
       <span class="launcher-name">小芽</span>
@@ -116,6 +118,81 @@ const selectedText = ref('')
 const unreadCount = computed(() => notifications.value.length)
 const badgeLabel = computed(() => unreadCount.value > 99 ? '99+' : String(unreadCount.value))
 let refreshTimer = null
+
+// ── Drag logic ──
+const launcherRef = ref(null)
+const DRAG_THRESHOLD = 5
+const STORAGE_KEY = 'xiaoya-launcher-pos'
+const dragOffset = ref(loadPosition())
+const isDragging = ref(false)
+
+function loadPosition() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) { const p = JSON.parse(raw); return { x: p.x || 0, y: p.y || 0 } }
+  } catch { /* ignore */ }
+  return { x: 0, y: 0 }
+}
+
+function savePosition(pos) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pos)) } catch { /* ignore */ }
+}
+
+const launcherStyle = computed(() => {
+  const { x, y } = dragOffset.value
+  if (x === 0 && y === 0) return {}
+  return { transform: `translate(${x}px, ${y}px)` }
+})
+
+function clampPosition(x, y) {
+  const el = launcherRef.value
+  if (!el) return { x, y }
+  const rect = el.getBoundingClientRect()
+  const w = rect.width, h = rect.height
+  // 计算按钮在无 translate 时的原始位置
+  const origLeft = rect.left - dragOffset.value.x
+  const origTop = rect.top - dragOffset.value.y
+  const minX = -origLeft
+  const maxX = window.innerWidth - origLeft - w
+  const minY = -origTop
+  const maxY = window.innerHeight - origTop - h
+  return {
+    x: Math.round(Math.min(Math.max(x, minX), maxX)),
+    y: Math.round(Math.min(Math.max(y, minY), maxY))
+  }
+}
+
+function onDragStart(e) {
+  // 只响应主按键（左键/触摸）
+  if (e.button && e.button !== 0) return
+  const startX = e.clientX, startY = e.clientY
+  const origX = dragOffset.value.x, origY = dragOffset.value.y
+  let moved = false
+
+  const onMove = (ev) => {
+    const dx = ev.clientX - startX, dy = ev.clientY - startY
+    if (!moved && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
+    moved = true
+    isDragging.value = true
+    dragOffset.value = clampPosition(origX + dx, origY + dy)
+  }
+
+  const onUp = () => {
+    document.removeEventListener('pointermove', onMove)
+    document.removeEventListener('pointerup', onUp)
+    if (moved) {
+      savePosition(dragOffset.value)
+      // 延迟重置，防止 pointerup 同时触发 click
+      setTimeout(() => { isDragging.value = false }, 50)
+    } else {
+      isDragging.value = false
+      togglePanel()
+    }
+  }
+
+  document.addEventListener('pointermove', onMove)
+  document.addEventListener('pointerup', onUp)
+}
 
 const refreshUnread = async () => {
   if (!visible.value) return
@@ -230,8 +307,9 @@ onUnmounted(() => {
 <style scoped>
 .companion-widget { position: relative; z-index: 3000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
 .companion-scrim { position: fixed; inset: 0; background: rgba(14, 38, 31, .18); z-index: 0; }
-.companion-launcher { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; min-height: 84px; padding: 4px 4px 6px; border: 1px solid #d4f0e3; border-radius: 26px; background: rgba(255, 255, 255, .97); box-shadow: 0 8px 28px rgba(24, 94, 69, .2); cursor: pointer; color: #176e51; }
-.companion-launcher:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(24, 94, 69, .27); }
+.companion-launcher { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; min-height: 84px; padding: 4px 4px 6px; border: 1px solid #d4f0e3; border-radius: 26px; background: rgba(255, 255, 255, .97); box-shadow: 0 8px 28px rgba(24, 94, 69, .2); cursor: grab; color: #176e51; touch-action: none; user-select: none; -webkit-user-select: none; }
+.companion-launcher:active { cursor: grabbing; }
+.companion-launcher:hover { box-shadow: 0 12px 30px rgba(24, 94, 69, .27); }
 .companion-launcher:focus-visible, .companion-panel button:focus-visible { outline: 3px solid #21a474; outline-offset: 2px; }
 .launcher-name { margin-top: -4px; font-size: 12px; font-weight: 800; }
 .unread-badge { position: absolute; top: -7px; right: -6px; display: grid; place-items: center; min-width: 23px; height: 23px; padding: 0 5px; border: 2px solid white; border-radius: 14px; background: #ef4967; color: white; font-size: 11px; font-weight: 800; }
