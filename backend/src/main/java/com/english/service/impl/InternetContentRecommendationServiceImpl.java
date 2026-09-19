@@ -64,9 +64,19 @@ public class InternetContentRecommendationServiceImpl implements InternetContent
                 .sorted(Comparator.comparingDouble(InternetContentRecommendationDto::getScore).reversed())
                 .collect(Collectors.toList());
 
-        List<InternetContentRecommendationDto> diverse = takeWithTopicDiversity(ranked, safeLimit);
+        // Keep at least one platform article in the mix when available. Only platform
+        // articles currently have the full in-app reading → version → quiz → review loop.
+        int platformReserve = Math.min(2, Math.max(1, safeLimit / 3));
+        List<InternetContentRecommendationDto> diverse = takeWithTopicDiversity(
+                ranked, Math.max(0, safeLimit - platformReserve));
+        if (diverse.size() < safeLimit) fillWithPlatformContent(userId, safeLimit, diverse);
         if (diverse.size() < safeLimit) {
-            fillWithPlatformContent(userId, safeLimit, diverse);
+            Set<String> existing = diverse.stream().map(InternetContentRecommendationDto::getId)
+                    .collect(Collectors.toSet());
+            for (InternetContentRecommendationDto candidate : ranked) {
+                if (existing.add(candidate.getId())) diverse.add(candidate);
+                if (diverse.size() >= safeLimit) break;
+            }
         }
         return diverse;
     }
@@ -239,6 +249,7 @@ public class InternetContentRecommendationServiceImpl implements InternetContent
     private List<InternetContentRecommendationDto> takeWithTopicDiversity(
             List<InternetContentRecommendationDto> ranked, int limit) {
         List<InternetContentRecommendationDto> result = new ArrayList<>();
+        if (limit <= 0) return result;
         Map<String, Integer> topicCounts = new HashMap<>();
         for (InternetContentRecommendationDto item : ranked) {
             int count = topicCounts.getOrDefault(item.getTopic(), 0);

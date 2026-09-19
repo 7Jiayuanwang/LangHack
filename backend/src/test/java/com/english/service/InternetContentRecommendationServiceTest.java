@@ -88,6 +88,26 @@ class InternetContentRecommendationServiceTest {
     }
 
     @Test
+    void reservesAPlatformReadingSlotWhenExternalPoolIsFull() {
+        when(interestMapper.selectList(any())).thenReturn(Collections.emptyList());
+        when(userService.getUserById(7L)).thenReturn(null);
+        when(sharedContentPool.currentCandidates()).thenReturn(List.of(
+                candidate("Artificial intelligence", "artificial intelligence", "ai"),
+                candidate("History of film", "culture", "film"),
+                candidate("Environmental science", "environmental science", "environment")));
+        Text text = new Text();
+        text.setId(55L);
+        text.setTitle("A platform article to study");
+        text.setContent("A full English article with level versions and questions.");
+        when(recommendationService.recommend(7L, 1)).thenReturn(List.of(text));
+
+        List<InternetContentRecommendationDto> result = service.recommendForUser(7L, 3);
+
+        assertEquals(3, result.size());
+        assertEquals(1, result.stream().filter(item -> !item.isExternal()).count());
+    }
+
+    @Test
     void doesNotUseGenericScienceTokenForUnrelatedCourseRecommendation() {
         when(interestMapper.selectList(any())).thenReturn(Collections.emptyList());
         User user = new User();

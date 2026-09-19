@@ -10,6 +10,21 @@ export const getLearningAgentContentRecommendations = (count = 6) =>
     params: { count }
   })
 
+export const getLearningAgentStudyLoop = () =>
+  request({ url: '/api/student/agent/study-loop', method: 'get' })
+
+// Only invoked after the student explicitly submits a visible draft for feedback.
+export const requestWritingFeedback = (draft) =>
+  request({
+    url: '/api/student/ai-qa/chat',
+    method: 'post',
+    data: {
+      scene: 'LEARNING_AGENT',
+      userQuestion: '这是我自己写的英语作文。请先指出两个具体优点，再指出最重要的两个可改进处，并给出简短修改示例。不要编造未提供的内容。',
+      selectedText: draft
+    }
+  })
+
 export const saveLearningAgentOnboarding = (data) =>
   request({ url: '/api/student/agent/onboarding', method: 'put', data })
 

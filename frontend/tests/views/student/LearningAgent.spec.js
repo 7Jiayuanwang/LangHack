@@ -29,6 +29,7 @@ const contextResponse = {
 const apiMocks = vi.hoisted(() => ({
   getLearningAgentContext: vi.fn(),
   getLearningAgentContentRecommendations: vi.fn(),
+  getLearningAgentStudyLoop: vi.fn(),
   saveLearningAgentOnboarding: vi.fn(),
   addLearningAgentMemory: vi.fn(),
   deleteLearningAgentMemory: vi.fn()
@@ -41,8 +42,14 @@ import LearningAgent from '@/views/student/LearningAgent.vue'
 describe('Student LearningAgent.vue', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    sessionStorage.clear()
     apiMocks.getLearningAgentContext.mockResolvedValue(contextResponse)
     apiMocks.getLearningAgentContentRecommendations.mockResolvedValue({ code: 200, data: [] })
+    apiMocks.getLearningAgentStudyLoop.mockResolvedValue({
+      code: 200,
+      data: { attemptCount: 0, practicedArticleCount: 0, answeredQuestionCount: 0,
+        correctQuestionCount: 0, dueReviews: [], recentWrongQuestions: [] }
+    })
     apiMocks.saveLearningAgentOnboarding.mockResolvedValue({
       code: 200,
       data: { ...contextResponse.data, onboardingCompleted: true, weeklyMinutes: 210 }
@@ -95,5 +102,41 @@ describe('Student LearningAgent.vue', () => {
 
     expect(apiMocks.getLearningAgentContentRecommendations).toHaveBeenCalledWith(6)
     expect(wrapper.vm.contentRecommendations).toEqual([])
+    expect(apiMocks.getLearningAgentStudyLoop).toHaveBeenCalledOnce()
+  })
+
+  it('links a due review back to the article quiz', async () => {
+    const wrapper = shallowMount(LearningAgent)
+    await flushPromises()
+    wrapper.vm.reviewArticle(42)
+    expect(routerMocks.push).toHaveBeenCalledWith({
+      path: '/article/42', query: { from: 'agent-review', focus: 'quiz' }
+    })
+  })
+
+  it('lets the learner explicitly ask Xiaoya about a wrong question', async () => {
+    const wrapper = shallowMount(LearningAgent)
+    await flushPromises()
+    wrapper.vm.askAboutWrongQuestion({
+      question: 'What does the sentence mean?', userAnswer: 'B', correctAnswer: 'A',
+      analysis: 'The context supports A.'
+    })
+    expect(routerMocks.push).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/student/ai-qa',
+      query: expect.not.objectContaining({ text: expect.anything() })
+    }))
+    expect(JSON.parse(sessionStorage.getItem('xiaoya:pending-question-context')).text)
+      .toContain('我的答案：B')
+  })
+
+  it('keeps external excerpts in the browser until the learner opens chat', async () => {
+    const wrapper = shallowMount(LearningAgent)
+    await flushPromises()
+    wrapper.vm.previewItem = { title: 'Research news', summary: 'An English summary', sourceName: 'Wikipedia' }
+    wrapper.vm.askAboutSummary()
+    expect(routerMocks.push).toHaveBeenCalledWith(expect.objectContaining({
+      path: '/student/ai-qa',
+      query: expect.objectContaining({ text: 'An English summary', articleTitle: 'Research news' })
+    }))
   })
 })

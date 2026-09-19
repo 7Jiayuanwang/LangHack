@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
+import request from '@/utils/request'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -58,5 +59,20 @@ describe('UserTexts.vue', () => {
     expect(() => {
       shallowMount(UserTexts)
     }).not.toThrow()
+  })
+
+  it('only sends a writing draft after the learner explicitly submits it', async () => {
+    const wrapper = shallowMount(UserTexts)
+    wrapper.vm.openWritingCoach({ contentType: 'TEXT', content: 'My own English essay.' })
+    expect(wrapper.vm.writingDraft).toBe('My own English essay.')
+    expect(request).not.toHaveBeenCalledWith(expect.objectContaining({ url: '/api/student/ai-qa/chat' }))
+
+    request.mockResolvedValueOnce({ code: 200, data: { response: 'Good opening. Improve the conclusion.' } })
+    await wrapper.vm.sendWritingForFeedback()
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      url: '/api/student/ai-qa/chat',
+      data: expect.objectContaining({ selectedText: 'My own English essay.', scene: 'LEARNING_AGENT' })
+    }))
+    expect(wrapper.vm.writingFeedback).toContain('Improve the conclusion')
   })
 })

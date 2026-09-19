@@ -197,12 +197,52 @@
           </section>
         </div>
 
+        <section class="study-loop-card" aria-label="小芽学习进度与复习">
+          <div class="card-heading">
+            <div>
+              <h3>把今天读过的内容真正学会</h3>
+              <p>基于你在平台内的文章练习记录，安排下一次巩固。</p>
+            </div>
+            <button type="button" class="quiet-action" @click="loadStudyLoop">刷新记录</button>
+          </div>
+          <div v-if="studyLoopLoading" class="recommendation-loading"><el-skeleton :rows="2" animated /></div>
+          <p v-else-if="studyLoopError" class="study-loop-empty">{{ studyLoopError }} <button type="button" class="quiet-action" @click="loadStudyLoop">重试</button></p>
+          <template v-else>
+            <div class="study-stats">
+              <span>{{ studyLoop.sampleLimited ? '近期练习' : '已练习' }} <strong>{{ studyLoop.practicedArticleCount }}</strong> 篇</span>
+              <span>{{ studyLoop.sampleLimited ? '近期完成' : '完成' }} <strong>{{ studyLoop.attemptCount }}</strong> 次答题</span>
+              <span v-if="studyLoop.answeredQuestionCount">{{ studyLoop.sampleLimited ? '近期答对' : '累计答对' }} <strong>{{ studyLoop.correctQuestionCount }}/{{ studyLoop.answeredQuestionCount }}</strong> 题</span>
+            </div>
+            <p v-if="studyLoop.sampleLimited" class="study-loop-empty">成绩和错题展示只统计最近 200 次答题；到期复习任务仍按完整计划计算。</p>
+            <p v-if="!studyLoop.attemptCount" class="study-loop-empty">先从下方选一篇“平台精读”文章，阅读后做几道题，小芽就能据此安排复习。</p>
+            <div v-else-if="studyLoop.dueReviews.length" class="review-list">
+              <h4>现在适合复习 · {{ studyLoop.dueReviewCount || studyLoop.dueReviews.length }} 篇</h4>
+              <div v-for="task in studyLoop.dueReviews" :key="task.textId" class="review-item">
+                <div><strong>{{ task.title }}</strong><small>{{ task.reason }} · 上次答对 {{ task.latestCorrect }}/{{ task.latestTotal }} 题</small></div>
+                <button type="button" @click="reviewArticle(task.textId)">去复习 →</button>
+              </div>
+            </div>
+            <p v-else-if="studyLoop.attemptCount" class="study-loop-empty">目前没有到期的复习任务。已完成的练习会按上次答题表现安排后续巩固。</p>
+            <div v-if="studyLoop.recentWrongQuestions.length" class="wrong-question-list">
+              <h4>最近可以回头看看</h4>
+              <article v-for="(wrong, index) in studyLoop.recentWrongQuestions.slice(0, 3)" :key="index">
+                <strong>{{ wrong.title }}</strong>
+                <p>{{ wrong.question }}</p>
+                <small>你的答案：{{ wrong.userAnswer || '未填写' }} · 正确答案：{{ wrong.correctAnswer || '见原题' }}</small>
+                <p v-if="wrong.analysis" class="wrong-analysis">{{ wrong.analysis }}</p>
+                <button type="button" @click="reviewArticle(wrong.textId)">回到文章练习</button>
+                <button type="button" @click="askAboutWrongQuestion(wrong)">问小芽这道题</button>
+              </article>
+            </div>
+          </template>
+        </section>
+
         <section class="content-recommendation-card">
           <div class="card-heading">
             <div>
               <span class="content-kicker">ENGLISH FOR YOUR WORLD</span>
               <h3>为你找到的英文内容</h3>
-              <p>根据兴趣、专业和课表在本地匹配；难度将在后续阅读环节调整。</p>
+              <p>平台精读可完成难度适配、答题和复习；互联网内容先从英文摘要探索，再打开原站。</p>
             </div>
             <span v-if="contentRecommendations.length">{{ contentRecommendations.length }} 篇</span>
           </div>
@@ -212,11 +252,12 @@
           </div>
           <div v-else-if="contentRecommendations.length" class="recommendation-grid">
             <article
-              v-for="item in contentRecommendations"
+              v-for="item in sortedRecommendations"
               :key="item.id"
               class="recommendation-item"
             >
               <div class="recommendation-meta">
+                <span>{{ item.external ? '开放内容探索' : '平台精读' }}</span>
                 <span>{{ item.sourceName }}</span>
                 <span>{{ item.topic }}</span>
               </div>
@@ -227,7 +268,8 @@
                 <button type="button" @click="openRecommendedContent(item)">
                   {{ item.external ? '打开英文原文' : '在平台阅读' }} →
                 </button>
-                <button type="button" class="quiet" @click="askAboutContent(item)">问问小芽</button>
+                <button v-if="item.external && item.summary" type="button" class="quiet" @click="previewItem = item">站内读摘要</button>
+                <button v-else type="button" class="quiet" @click="askAboutContent(item)">问问小芽</button>
               </div>
             </article>
           </div>
@@ -260,16 +302,25 @@
             <el-button type="primary" :loading="memorySaving" @click="createMemory">记住这件事</el-button>
           </div>
           <div class="privacy-note">
-            学习档案目前只用于平台内展示和确定性建议，不会默认随对话发送给外部 AI 服务。
+            只有你主动向小芽发送消息时，对话才会携带必要的学习画像交给已配置的 AI 服务。可在此查看和删除长期记忆。
           </div>
         </section>
       </template>
     </main>
+    <el-dialog :model-value="!!previewItem" @update:model-value="value => { if (!value) previewItem = null }" :title="previewItem?.title || '英文摘要'" width="min(680px, 94vw)">
+      <p class="preview-source">{{ previewItem?.sourceName }} · 这里只展示公开来源提供的短摘要，不代表全文。</p>
+      <p class="preview-excerpt" lang="en">{{ previewItem?.summary }}</p>
+      <template #footer>
+        <el-button @click="previewItem = null">关闭</el-button>
+        <el-button @click="openRecommendedContent(previewItem)">打开原文</el-button>
+        <el-button type="primary" @click="askAboutSummary">请小芽适配并提问</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AgentMascot from '@/components/AgentMascot.vue'
@@ -278,6 +329,7 @@ import {
   deleteLearningAgentMemory,
   getLearningAgentContentRecommendations,
   getLearningAgentContext,
+  getLearningAgentStudyLoop,
   saveLearningAgentOnboarding
 } from '@/api/learningAgent'
 
@@ -291,6 +343,16 @@ const loadError = ref('')
 const customInterest = ref('')
 const newMemory = ref('')
 const contentRecommendations = ref([])
+const sortedRecommendations = computed(() => [...contentRecommendations.value]
+  .sort((a, b) => Number(a.external) - Number(b.external)))
+const previewItem = ref(null)
+const studyLoopLoading = ref(false)
+const studyLoopError = ref('')
+const studyLoop = reactive({
+  attemptCount: 0, practicedArticleCount: 0, answeredQuestionCount: 0,
+  correctQuestionCount: 0, recentSevenDayAttempts: 0, sampleLimited: false,
+  dueReviews: [], recentWrongQuestions: []
+})
 
 const context = reactive({
   onboardingCompleted: false,
@@ -380,7 +442,10 @@ const loadContext = async () => {
     if (response?.code !== 200) throw new Error(response?.message || '读取失败')
     applyContext(response.data)
     hydrateForm()
-    if (context.onboardingCompleted) loadRecommendations()
+    if (context.onboardingCompleted) {
+      loadRecommendations()
+      loadStudyLoop()
+    }
   } catch (error) {
     loadError.value = error?.message || '请确认智能体数据迁移已经执行。'
   } finally {
@@ -399,6 +464,23 @@ const loadRecommendations = async () => {
     contentRecommendations.value = []
   } finally {
     recommendationsLoading.value = false
+  }
+}
+
+const loadStudyLoop = async () => {
+  studyLoopLoading.value = true
+  studyLoopError.value = ''
+  try {
+    const response = await getLearningAgentStudyLoop()
+    if (response?.code !== 200 || !response.data) throw new Error(response?.message || '读取失败')
+    Object.assign(studyLoop, response.data, {
+      dueReviews: Array.isArray(response.data.dueReviews) ? response.data.dueReviews : [],
+      recentWrongQuestions: Array.isArray(response.data.recentWrongQuestions) ? response.data.recentWrongQuestions : []
+    })
+  } catch {
+    studyLoopError.value = '暂时读取不到复习记录。'
+  } finally {
+    studyLoopLoading.value = false
   }
 }
 
@@ -448,6 +530,7 @@ const submitOnboarding = async () => {
     hydrateForm()
     editing.value = false
     loadRecommendations()
+    loadStudyLoop()
     ElMessage.success('学习档案已保存，小芽会从这里开始陪你学习')
   } catch (error) {
     ElMessage.error(error?.message || '保存失败，请稍后再试')
@@ -477,6 +560,45 @@ const openRecommendedContent = (item) => {
   } else {
     router.push(item.url)
   }
+}
+
+const reviewArticle = (textId) => {
+  router.push({ path: `/article/${textId}`, query: { from: 'agent-review', focus: 'quiz' } })
+}
+
+const askAboutWrongQuestion = (wrong) => {
+  const question = `${wrong.question || ''}\n我的答案：${wrong.userAnswer || '未填写'}；正确答案：${wrong.correctAnswer || '见原题'}\n原题解析：${wrong.analysis || '暂无'}`
+  try {
+    // Keep a student's answer out of the URL, browser history and access logs.
+    sessionStorage.setItem('xiaoya:pending-question-context', JSON.stringify({
+      text: question.slice(0, 2000), createdAt: Date.now()
+    }))
+  } catch {
+    ElMessage.error('暂时无法带入错题内容，请稍后再试')
+    return
+  }
+  router.push({
+    path: '/student/ai-qa',
+    query: {
+      mode: 'agent',
+      question: '我为什么会做错这道题？请解释思路，并给我一道类似的自测题。'
+    }
+  })
+}
+
+const askAboutSummary = () => {
+  const item = previewItem.value
+  if (!item?.summary) return
+  previewItem.value = null
+  router.push({
+    path: '/student/ai-qa',
+    query: {
+      mode: 'agent',
+      text: item.summary.slice(0, 2000),
+      articleTitle: item.title,
+      question: '请根据这段英文摘要，给我适合当前水平的阅读提示，并问我一个理解问题。不要假装看过全文。'
+    }
+  })
 }
 
 const askAboutContent = (item) => {
@@ -552,7 +674,7 @@ loadContext()
 .hero-copy p { max-width: 680px; margin: 0; color: #4d6b61; font-size: 16px; line-height: 1.7; }
 
 .agent-main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-.state-card, .onboarding-card, .context-card, .memory-card, .content-recommendation-card {
+.state-card, .onboarding-card, .context-card, .memory-card, .content-recommendation-card, .study-loop-card {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(102, 168, 143, 0.16);
   border-radius: 24px;
@@ -607,6 +729,25 @@ loadContext()
 .chat-cta span { font-size: 18px; font-weight: 800; }
 .chat-cta small { margin-top: 5px; color: #6b827a; }
 .context-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; margin-top: 18px; }
+.study-loop-card { margin-top: 18px; padding: 22px; }
+.study-loop-card .card-heading p { margin: 3px 0 0; color: #71877f; font-size: 13px; }
+.quiet-action { border: none; background: none; color: #187453; cursor: pointer; font-weight: 700; }
+.study-stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 17px; }
+.study-stats span { padding: 8px 12px; border-radius: 11px; background: #eaf8ef; color: #406a55; font-size: 13px; }
+.study-stats strong { color: #146d4e; }
+.study-loop-empty { margin: 17px 0 0; color: #73877c; font-size: 13px; line-height: 1.7; }
+.review-list h4, .wrong-question-list h4 { margin: 22px 0 10px; color: #245c45; }
+.review-item { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; border-top: 1px solid #edf2ee; }
+.review-item strong, .review-item small { display: block; }
+.review-item small { margin-top: 5px; color: #75887d; font-size: 12px; }
+.review-item button, .wrong-question-list article button { flex-shrink: 0; border: 0; background: none; color: #18805b; cursor: pointer; font-weight: 700; }
+.wrong-question-list article { margin-top: 9px; padding: 13px; border-radius: 12px; background: #f7fbf8; }
+.wrong-question-list article strong { color: #285a43; }
+.wrong-question-list article p { margin: 7px 0; color: #506e60; font-size: 13px; }
+.wrong-question-list article small { color: #6f8078; }
+.wrong-question-list article .wrong-analysis { color: #687b70; }
+.preview-source { color: #71847d; font-size: 12px; }
+.preview-excerpt { white-space: pre-wrap; line-height: 1.8; color: #244b3a; }
 .context-card, .memory-card { padding: 22px; }
 .card-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .card-heading h3 { margin: 0 0 4px; font-size: 18px; }

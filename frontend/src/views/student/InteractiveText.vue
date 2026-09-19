@@ -2163,6 +2163,11 @@ onMounted(async () => {
   readerScrollElement = getReaderScrollElement()
   if (readerScrollElement) readerScrollElement.addEventListener('scroll', handleScroll, { passive: true })
   window.requestAnimationFrame(restoreReaderPosition)
+  if (route.query.focus === 'quiz') {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      document.querySelector('.ai-quiz-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }))
+  }
   loadAnnotations()
   // 添加页面可见性变化监听
   document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -2739,6 +2744,7 @@ const submitQuiz = async () => {
       }
     })
     const res = await submitQuizAnswers({ answers })
+    if (res?.code && res.code !== 200) throw new Error(res.message || '提交失败')
     const data = res?.data || res
 
     if (data && data.results) {
@@ -2760,14 +2766,16 @@ const submitQuiz = async () => {
           })
         }
       })
-      ElMessage.success(`答对 ${data.correctCount}/${data.total} 题`)
+      if (data.attemptId) {
+        ElMessage.success(`答对 ${data.correctCount}/${data.total} 题，已记入小芽的复习记录`)
+      } else {
+        ElMessage.warning(`答对 ${data.correctCount}/${data.total} 题，但复习记录保存失败；请稍后重试`)
+      }
     } else {
-      // fallback: 仅显示答案
-      quizQuestions.value.forEach(q => { q.showAnswer = true })
+      throw new Error('未收到有效的批改结果')
     }
   } catch (e) {
-    // fallback: 仅显示答案
-    quizQuestions.value.forEach(q => { q.showAnswer = true })
+    ElMessage.error(e?.message || '提交失败，请重试；答案暂未揭晓')
   }
 }
 

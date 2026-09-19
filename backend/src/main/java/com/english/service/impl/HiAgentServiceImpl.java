@@ -577,10 +577,7 @@ public class HiAgentServiceImpl implements HiAgentService {
                     },
                     response -> {
                         if (response.getStatusCode() != HttpStatus.OK) {
-                            Map<String, Object> error = new HashMap<>();
-                            error.put("message", "AI 问答服务暂时不可用，请稍后重试");
-                            writePlatformSseEvent(outputStream, "error", error);
-                            return false;
+                            throw new BusinessException("HiAgent QA HTTP " + response.getRawStatusCode());
                         }
 
                         return forwardNormalizedSse(response.getBody(), outputStream, completeAnswer);
@@ -589,10 +586,7 @@ public class HiAgentServiceImpl implements HiAgentService {
             if (Boolean.TRUE.equals(completed)) {
                 try {
                     if (completeAnswer.length() == 0) {
-                        Map<String, Object> error = new HashMap<>();
-                        error.put("message", "AI 问答服务未返回有效内容");
-                        writePlatformSseEvent(outputStream, "error", error);
-                        return;
+                        throw new BusinessException("AI 问答服务未返回有效内容");
                     }
                     if (completionHandler != null) {
                         completionHandler.accept(completeAnswer.toString());
@@ -695,6 +689,11 @@ public class HiAgentServiceImpl implements HiAgentService {
             return Boolean.TRUE;
         }
         if ("error".equals(upstreamEvent)) {
+            // Let the controller try a configured provider if no answer has reached the browser.
+            if (completeAnswer.length() == 0) {
+                throw new BusinessException("HiAgent QA stream error: "
+                        + extractFirstText(payload, "message", "error"));
+            }
             Map<String, Object> error = new HashMap<>();
             error.put("message", extractFirstText(payload, "message", "error"));
             writePlatformSseEvent(outputStream, "error", error);

@@ -32,6 +32,9 @@ public class StudentAiQuizServiceImpl implements StudentAiQuizService {
     @Autowired
     private StudentAiQuizRecordMapper recordMapper;
 
+    @Autowired
+    private AgentReviewPlanService reviewPlanService;
+
     @Override
     @Transactional
     public StudentAiQuizAttempt saveAttempt(StudentAiQuizAttempt attempt, List<StudentAiQuizRecord> records) {
@@ -85,6 +88,9 @@ public class StudentAiQuizServiceImpl implements StudentAiQuizService {
             recordMapper.insert(r);
         }
 
+        // Same transaction: a saved attempt always has a matching next-review task.
+        reviewPlanService.recordAttempt(attempt);
+
         return attempt;
     }
 
@@ -106,6 +112,16 @@ public class StudentAiQuizServiceImpl implements StudentAiQuizService {
             log.error("查询学生 AI 题做题记录失败 studentId={} textId={}", studentId, textId, e);
             return Collections.emptyList();
         }
+    }
+
+    @Override
+    public List<StudentAiQuizAttempt> listRecentMyAttempts(Long studentId, int limit) {
+        if (studentId == null) throw new BusinessException("studentId 不能为空");
+        int safeLimit = Math.min(Math.max(limit, 1), 200);
+        return attemptMapper.selectList(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<StudentAiQuizAttempt>()
+                .eq("student_id", studentId)
+                .orderByDesc("submitted_time", "id")
+                .last("LIMIT " + safeLimit));
     }
 
     @Override
