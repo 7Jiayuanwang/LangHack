@@ -15,13 +15,23 @@ INNER JOIN (SELECT word, MIN(id) AS min_id FROM words WHERE deleted=0 GROUP BY w
   ON w.word = keeper.word
 WHERE w.deleted=0 AND w.id != keeper.min_id;
 
--- 2. vocabulary_books：先删冲突记录（学生对 new_id 已有记录），再迁移剩余
-DELETE vb FROM vocabulary_books vb
-INNER JOIN _word_dup_map m ON vb.word_id = m.old_id
-WHERE EXISTS (
-  SELECT 1 FROM (SELECT student_id, word_id FROM vocabulary_books) vb2
-  WHERE vb2.student_id = vb.student_id AND vb2.word_id = m.new_id
-);
+-- 2. vocabulary_books：多个旧词可能同时映射到同一个新词。
+--    先为每个 (student_id, new_word_id) 选一条记录，删除其余记录，
+--    再迁移保留记录，避免 uk_student_word 冲突。
+CREATE TEMPORARY TABLE _v55_vocab_keep AS
+SELECT COALESCE(
+         MIN(CASE WHEN m.old_id IS NULL THEN vb.id END),
+         MIN(vb.id)
+       ) AS keep_id
+FROM vocabulary_books vb
+LEFT JOIN _word_dup_map m ON m.old_id = vb.word_id
+GROUP BY vb.student_id, COALESCE(m.new_id, vb.word_id);
+
+DELETE vb
+FROM vocabulary_books vb
+LEFT JOIN _word_dup_map m ON m.old_id = vb.word_id
+LEFT JOIN _v55_vocab_keep keep_row ON keep_row.keep_id = vb.id
+WHERE keep_row.keep_id IS NULL;
 
 UPDATE vocabulary_books vb
 INNER JOIN _word_dup_map m ON vb.word_id = m.old_id
@@ -38,4 +48,5 @@ INNER JOIN _word_dup_map m ON w.id = m.old_id
 SET w.deleted = 1;
 
 -- 5. 清理映射表
+DROP TEMPORARY TABLE _v55_vocab_keep;
 DROP TABLE _word_dup_map;
