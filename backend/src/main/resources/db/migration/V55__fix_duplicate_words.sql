@@ -8,6 +8,22 @@ CREATE TABLE IF NOT EXISTS _word_dup_map (
   PRIMARY KEY (old_id)
 );
 
+SET @v55_new_id_index_exists = (
+  SELECT COUNT(*)
+  FROM information_schema.statistics
+  WHERE table_schema = DATABASE()
+    AND table_name = '_word_dup_map'
+    AND index_name = 'idx_v55_new_id'
+);
+SET @v55_add_new_id_index = IF(
+  @v55_new_id_index_exists = 0,
+  'ALTER TABLE _word_dup_map ADD INDEX idx_v55_new_id (new_id)',
+  'SELECT 1'
+);
+PREPARE v55_add_new_id_index_stmt FROM @v55_add_new_id_index;
+EXECUTE v55_add_new_id_index_stmt;
+DEALLOCATE PREPARE v55_add_new_id_index_stmt;
+
 -- V55 may be interrupted while deleting a large vocabulary_books table.
 -- Clear a partial mapping so a retry starts from a consistent snapshot.
 TRUNCATE TABLE _word_dup_map;
@@ -33,11 +49,17 @@ SELECT COALESCE(
        ) AS keep_id
 FROM vocabulary_books vb
 LEFT JOIN _word_dup_map m ON m.old_id = vb.word_id
+WHERE m.old_id IS NOT NULL
+   OR EXISTS (
+       SELECT 1
+       FROM _word_dup_map existing_map
+       WHERE existing_map.new_id = vb.word_id
+   )
 GROUP BY vb.student_id, COALESCE(m.new_id, vb.word_id);
 
 DELETE vb
 FROM vocabulary_books vb
-LEFT JOIN _word_dup_map m ON m.old_id = vb.word_id
+INNER JOIN _word_dup_map m ON m.old_id = vb.word_id
 LEFT JOIN _v55_vocab_keep keep_row ON keep_row.keep_id = vb.id
 WHERE keep_row.keep_id IS NULL;
 
