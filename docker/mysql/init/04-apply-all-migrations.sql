@@ -4473,7 +4473,7 @@ CREATE TABLE IF NOT EXISTS learner_memories (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户可查看和管理的学习伙伴长期记忆';
 
 
--- V55__learner_review_tasks.sql
+-- V56__learner_review_tasks.sql
 
 CREATE TABLE IF NOT EXISTS learner_review_tasks (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '复习任务 ID',
@@ -4521,3 +4521,45 @@ FROM (
 ) recent
 WHERE recent.rn = 1
 ON DUPLICATE KEY UPDATE updated_time = updated_time;
+
+
+-- V57__article_learning_insights.sql
+
+CREATE TABLE IF NOT EXISTS article_learning_insights (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    text_id BIGINT NOT NULL,
+    content_version VARCHAR(24) NOT NULL,
+    target_level VARCHAR(20) NOT NULL,
+    content_hash CHAR(64) NOT NULL,
+    points_json TEXT NOT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_article_insight_cache (text_id, content_version, target_level, content_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS article_insight_messages (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    text_id BIGINT NOT NULL,
+    insight_id BIGINT NOT NULL,
+    read_time DATETIME DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_article_insight_delivery (user_id, insight_id),
+    KEY idx_article_insight_unread (user_id, read_time, created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- V58__xiaoya_external_learning.sql
+
+CREATE TABLE IF NOT EXISTS xiaoya_external_learning (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    learning_day DATE NOT NULL,
+    source_type VARCHAR(12) NOT NULL,
+    source_title VARCHAR(120) DEFAULT NULL,
+    takeaway_en VARCHAR(500) NOT NULL,
+    takeaway_hash CHAR(64) NOT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_xiaoya_external_day_takeaway (user_id, learning_day, takeaway_hash),
+    KEY idx_xiaoya_external_user_day (user_id, learning_day, created_time),
+    CONSTRAINT fk_xiaoya_external_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
