@@ -111,6 +111,13 @@
           </div>
           <button class="reader-settings-trigger" type="button" @click="showReaderSettings = true" aria-label="阅读设置">Aa <span>阅读设置</span></button>
         </div>
+        <ArticleAudioPlayer
+          v-if="textId && textContent"
+          :text-id="textId"
+          :version="currentVersion"
+          :assignment-id="assignmentId"
+          :enable-insights="userStore.userRole === 'STUDENT' || userStore.userRole === 'USER'"
+        />
       </header>
 
       <!-- Main Content Area -->
@@ -617,6 +624,7 @@ import { toggleSentenceFavorite } from '@/api/sentenceFavorite'
 import { getArticlesPath } from '@/config/site'
 import rangy from '@/utils/rangy'
 import XyMascot from '@/components/ui/XyMascot.vue'
+import ArticleAudioPlayer from '@/components/ArticleAudioPlayer.vue'
 import { getArticleLearningInsights } from '@/api/learningAgent'
 
 const route = useRoute()

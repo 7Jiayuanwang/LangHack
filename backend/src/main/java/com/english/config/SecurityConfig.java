@@ -128,7 +128,7 @@ public class SecurityConfig {
                     .addHeaderWriter(new StaticHeadersWriter("Referrer-Policy", "strict-origin-when-cross-origin"))
                     .addHeaderWriter(new StaticHeadersWriter("X-XSS-Protection", "0"))
                     .addHeaderWriter(new StaticHeadersWriter("Content-Security-Policy",
-                        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self'"))
+                        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https: blob:; connect-src 'self'"))
                 .and()
                 .cors().configurationSource(corsConfigurationSource())
                 .and()

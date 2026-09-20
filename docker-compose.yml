@@ -225,6 +225,7 @@ services:
       # AI 翻译（可选，也可在运维面板配置）
       AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
       AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
+      ARTICLE_AUDIO_STORAGE_DIR: ${ARTICLE_AUDIO_STORAGE_DIR:-/app/uploads/article-audio}
       AI_TRANSLATE_MODEL: ${AI_TRANSLATE_MODEL:-}
       # SSO Configuration
       SSO_ENABLED: ${SSO_ENABLED:-true}
