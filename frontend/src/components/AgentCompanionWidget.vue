@@ -10,7 +10,7 @@
       aria-label="小芽英语学习伙伴"
     >
       <header class="companion-header">
-        <AgentMascot :size="42" />
+        <AgentMascot :size="42" :stage="growthStage" />
         <div class="companion-title">
           <strong>小芽</strong>
           <span>你的英语学习伙伴</span>
@@ -83,7 +83,7 @@
       :aria-expanded="expanded"
       @click="togglePanel"
     >
-      <AgentMascot :size="62" />
+      <AgentMascot :size="62" :stage="growthStage" />
       <span class="launcher-name">小芽</span>
       <span v-if="unreadCount" class="unread-badge" aria-label="未读消息">{{ badgeLabel }}</span>
     </button>
@@ -95,7 +95,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getUnreadNotifications, markNotificationRead } from '@/api/notification'
-import { getUnreadArticleInsights, markArticleInsightRead } from '@/api/learningAgent'
+import { getUnreadArticleInsights, getXiaoyaGrowthSummary, markArticleInsightRead } from '@/api/learningAgent'
 import AgentMascot from '@/components/AgentMascot.vue'
 
 // The full chat interface is loaded only when the student first opens 小芽.
@@ -115,9 +115,23 @@ const notifications = ref([])
 const selectedMessageId = ref(null)
 const articleTitle = ref('')
 const selectedText = ref('')
+const growthStage = ref('SEED')
 const unreadCount = computed(() => notifications.value.length)
 const badgeLabel = computed(() => unreadCount.value > 99 ? '99+' : String(unreadCount.value))
 let refreshTimer = null
+
+const refreshGrowth = async () => {
+  if (!visible.value) return
+  const token = userStore.token
+  try {
+    const response = await getXiaoyaGrowthSummary()
+    if (visible.value && userStore.token === token && response?.code === 200 && response.data?.stage) {
+      growthStage.value = response.data.stage
+    }
+  } catch {
+    // Growth is optional UI; a temporary failure must not interrupt chat.
+  }
+}
 
 const refreshUnread = async () => {
   if (!visible.value) return
@@ -141,6 +155,7 @@ const startRefreshing = () => {
   if (refreshTimer) clearInterval(refreshTimer)
   if (!visible.value) return
   refreshUnread()
+  refreshGrowth()
   refreshTimer = setInterval(refreshUnread, 60 * 1000)
 }
 
@@ -156,7 +171,7 @@ const togglePanel = () => {
   }
   opened.value = true
   expanded.value = !expanded.value
-  if (expanded.value) refreshUnread()
+  if (expanded.value) { refreshUnread(); refreshGrowth() }
 }
 
 const closePanel = () => { expanded.value = false }
@@ -199,7 +214,7 @@ const focusArticleTool = async (selector) => {
 }
 
 const onVisibilityChange = () => {
-  if (!document.hidden) refreshUnread()
+  if (!document.hidden) { refreshUnread(); refreshGrowth() }
 }
 
 const onKeyDown = (event) => {
@@ -212,6 +227,7 @@ watch(visible, (show) => {
     stopRefreshing()
     closePanel()
     notifications.value = []
+    growthStage.value = 'SEED'
   }
 }, { immediate: true })
 
@@ -219,18 +235,22 @@ watch(() => userStore.token, () => {
   opened.value = false
   activeTab.value = 'chat'
   selectedMessageId.value = null
+  growthStage.value = 'SEED'
+  refreshGrowth()
 })
 
 watch(() => route.fullPath, () => {
   closePanel()
   articleTitle.value = ''
   selectedText.value = ''
+  refreshGrowth()
 })
 
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   document.addEventListener('keydown', onKeyDown)
   window.addEventListener('langhack:agent-messages-changed', refreshUnread)
+  window.addEventListener('langhack:xiaoya-growth-changed', refreshGrowth)
 })
 
 onUnmounted(() => {
@@ -238,6 +258,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
   document.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('langhack:agent-messages-changed', refreshUnread)
+  window.removeEventListener('langhack:xiaoya-growth-changed', refreshGrowth)
 })
 </script>
 

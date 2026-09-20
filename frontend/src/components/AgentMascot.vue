@@ -1,7 +1,9 @@
 <template>
-  <div class="agent-mascot" :style="mascotStyle" aria-label="英语学习伙伴">
+  <div class="agent-mascot" :class="stageClass" :style="mascotStyle" aria-hidden="true">
     <span class="mascot-leaf leaf-left"></span>
     <span class="mascot-leaf leaf-right"></span>
+    <span v-if="stage === 'LEAF' || stage === 'BLOOM'" class="mascot-leaf leaf-crown"></span>
+    <span v-if="stage === 'BLOOM'" class="mascot-flower"></span>
     <div class="mascot-head">
       <span class="mascot-eye eye-left"></span>
       <span class="mascot-eye eye-right"></span>
@@ -17,8 +19,12 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  size: { type: Number, default: 72 }
+  size: { type: Number, default: 72 },
+  stage: { type: String, default: 'SEED' }
 })
+
+const stageClass = computed(() => ['SEED', 'SPROUT', 'LEAF', 'BLOOM'].includes(props.stage)
+  ? `stage-${props.stage.toLowerCase()}` : 'stage-seed')
 
 const mascotStyle = computed(() => ({
   width: `${props.size}px`,
@@ -51,6 +57,11 @@ const mascotStyle = computed(() => ({
   height: 34%;
   background: linear-gradient(145deg, #6ed6a5, #24a978);
 }
+
+.stage-seed .mascot-leaf { transform-origin: bottom center; scale: .82; }
+.stage-sprout .mascot-head { background: linear-gradient(145deg, #f5fff5, #a5eec6 55%, #68cda3); }
+.leaf-crown { left: 46%; top: -7%; width: 25%; height: 29%; border-radius: 100% 5% 100% 10%; transform: rotate(28deg); }
+.mascot-flower { position: absolute; z-index: 4; left: 48%; top: -10%; width: 14%; height: 14%; border: 2px solid #fff3c6; border-radius: 50%; background: #ffc96f; box-shadow: calc(var(--mascot-size) * -.1) 0 #f9a5ae, calc(var(--mascot-size) * .1) 0 #f9a5ae, 0 calc(var(--mascot-size) * -.1) #f9a5ae, 0 calc(var(--mascot-size) * .1) #f9a5ae; }
 
 .leaf-left {
   left: 27%;

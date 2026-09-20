@@ -20,7 +20,7 @@
     <template v-else-if="overview">
       <p class="data-scope">
         统计范围：{{ overview.windowStart }} 至 {{ overview.windowEnd }}，当前班级成员的全平台学习记录。
-        不包含线下学习，也不读取学生与小芽的对话。
+        不包含站外英文收获自述或线下学习，也不读取学生与小芽的对话或小芽成长状态。
       </p>
 
       <el-empty v-if="overview.totalStudents === 0" description="这个班级还没有在册学生，暂无可展示的学情数据" />

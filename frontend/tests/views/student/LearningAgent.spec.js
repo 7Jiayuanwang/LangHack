@@ -30,6 +30,10 @@ const apiMocks = vi.hoisted(() => ({
   getLearningAgentContext: vi.fn(),
   getLearningAgentContentRecommendations: vi.fn(),
   getLearningAgentStudyLoop: vi.fn(),
+  getXiaoyaGrowth: vi.fn(),
+  addXiaoyaExternalLearning: vi.fn(),
+  deleteXiaoyaExternalLearning: vi.fn(),
+  listXiaoyaExternalLearning: vi.fn(),
   saveLearningAgentOnboarding: vi.fn(),
   addLearningAgentMemory: vi.fn(),
   deleteLearningAgentMemory: vi.fn()
@@ -50,6 +54,14 @@ describe('Student LearningAgent.vue', () => {
       data: { attemptCount: 0, practicedArticleCount: 0, answeredQuestionCount: 0,
         correctQuestionCount: 0, dueReviews: [], recentWrongQuestions: [] }
     })
+    apiMocks.getXiaoyaGrowth.mockResolvedValue({
+      code: 200,
+      data: { stage: 'SEED', stageLabel: '刚发芽的小芽', growthPoints: 0,
+        nextStageAt: 10, meaningfulDays7d: 0, completedArticles: 0,
+        practicedArticles: 0, externalDays: 0, todayExternalCount: 0,
+        recentExternalLearning: [], encouragement: '从一句英文收获开始。' }
+    })
+    apiMocks.listXiaoyaExternalLearning.mockResolvedValue({ code: 200, data: { page: 1, total: 0, items: [] } })
     apiMocks.saveLearningAgentOnboarding.mockResolvedValue({
       code: 200,
       data: { ...contextResponse.data, onboardingCompleted: true, weeklyMinutes: 210 }
@@ -138,5 +150,48 @@ describe('Student LearningAgent.vue', () => {
       path: '/student/ai-qa',
       query: expect.objectContaining({ text: 'An English summary', articleTitle: 'Research news' })
     }))
+  })
+
+  it('records an external English takeaway only after explicit submission', async () => {
+    apiMocks.getLearningAgentContext.mockResolvedValue({
+      code: 200, data: { ...contextResponse.data, onboardingCompleted: true }
+    })
+    apiMocks.addXiaoyaExternalLearning.mockResolvedValue({
+      code: 200,
+      data: { stage: 'SPROUT', growthPoints: 10, todayExternalCount: 1, recentExternalLearning: [] }
+    })
+    const wrapper = shallowMount(LearningAgent)
+    await flushPromises()
+
+    expect(apiMocks.addXiaoyaExternalLearning).not.toHaveBeenCalled()
+    wrapper.vm.externalForm.sourceType = 'VIDEO'
+    wrapper.vm.externalForm.sourceTitle = 'English science video'
+    wrapper.vm.externalForm.takeawayEn = 'I learned how plants use sunlight to grow.'
+    await wrapper.vm.submitExternalLearning()
+
+    expect(apiMocks.addXiaoyaExternalLearning).toHaveBeenCalledWith({
+      sourceType: 'VIDEO', sourceTitle: 'English science video',
+      takeawayEn: 'I learned how plants use sunlight to grow.'
+    })
+    expect(wrapper.vm.growth.stage).toBe('SPROUT')
+    expect(wrapper.vm.externalForm.takeawayEn).toBe('')
+  })
+
+  it('paginates private external notes for individual deletion', async () => {
+    apiMocks.getLearningAgentContext.mockResolvedValue({
+      code: 200, data: { ...contextResponse.data, onboardingCompleted: true }
+    })
+    apiMocks.listXiaoyaExternalLearning.mockResolvedValue({
+      code: 200,
+      data: { page: 1, total: 12, items: [{ id: 1, takeawayEn: 'I found a useful idea.' }] }
+    })
+    const wrapper = shallowMount(LearningAgent)
+    await flushPromises()
+
+    await wrapper.vm.loadMoreExternalLearning()
+
+    expect(apiMocks.listXiaoyaExternalLearning).toHaveBeenCalledWith(1)
+    expect(wrapper.vm.historyExpanded).toBe(true)
+    expect(wrapper.vm.historyTotal).toBe(12)
   })
 })

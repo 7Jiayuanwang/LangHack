@@ -8,7 +8,8 @@ const state = vi.hoisted(() => ({
   getUnread: vi.fn(),
   markRead: vi.fn(),
   getUnreadInsights: vi.fn(),
-  markInsightRead: vi.fn()
+  markInsightRead: vi.fn(),
+  getGrowth: vi.fn()
 }))
 
 vi.mock('vue-router', () => ({
@@ -22,7 +23,8 @@ vi.mock('@/api/notification', () => ({
 }))
 vi.mock('@/api/learningAgent', () => ({
   getUnreadArticleInsights: state.getUnreadInsights,
-  markArticleInsightRead: state.markInsightRead
+  markArticleInsightRead: state.markInsightRead,
+  getXiaoyaGrowthSummary: state.getGrowth
 }))
 vi.mock('@/views/shared/AiQaPage.vue', () => ({
   __esModule: true,
@@ -33,7 +35,7 @@ vi.mock('@/views/shared/AiQaPage.vue', () => ({
   }
 }))
 vi.mock('@/components/AgentMascot.vue', () => ({
-  default: { name: 'AgentMascot', props: ['size'], template: '<div class="mascot-stub" />' }
+  default: { name: 'AgentMascot', props: ['size', 'stage'], template: '<div class="mascot-stub" />' }
 }))
 
 import AgentCompanionWidget from '@/components/AgentCompanionWidget.vue'
@@ -56,6 +58,7 @@ describe('AgentCompanionWidget', () => {
     state.markRead.mockResolvedValue({ code: 200, data: '已标记为已读' })
     state.getUnreadInsights.mockResolvedValue({ code: 200, data: [] })
     state.markInsightRead.mockResolvedValue({ code: 200, data: '已标记为已读' })
+    state.getGrowth.mockResolvedValue({ code: 200, data: { stage: 'LEAF' } })
   })
 
   afterEach(() => {
@@ -72,6 +75,12 @@ describe('AgentCompanionWidget', () => {
     expect(widget.findComponent({ name: 'AiQaPage' }).props()).toMatchObject({
       apiPath: '/api/student/ai-qa/chat/stream', agentMode: true, embedded: true
     })
+  })
+
+  it('shows the learner\'s plant stage on the persistent launcher', async () => {
+    const widget = mountWidget()
+    await flushPromises()
+    expect(widget.findAllComponents({ name: 'AgentMascot' }).at(-1).props('stage')).toBe('LEAF')
   })
 
   it('shows unread count and only marks a message read after an explicit click', async () => {

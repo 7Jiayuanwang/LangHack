@@ -13,6 +13,21 @@ export const getLearningAgentContentRecommendations = (count = 6) =>
 export const getLearningAgentStudyLoop = () =>
   request({ url: '/api/student/agent/study-loop', method: 'get' })
 
+export const getXiaoyaGrowth = () =>
+  request({ url: '/api/student/agent/growth', method: 'get' })
+
+export const getXiaoyaGrowthSummary = () =>
+  request({ url: '/api/student/agent/growth/summary', method: 'get' })
+
+export const addXiaoyaExternalLearning = (data) =>
+  request({ url: '/api/student/agent/growth/external', method: 'post', data })
+
+export const listXiaoyaExternalLearning = (page = 1) =>
+  request({ url: '/api/student/agent/growth/external', method: 'get', params: { page } })
+
+export const deleteXiaoyaExternalLearning = (noteId) =>
+  request({ url: `/api/student/agent/growth/external/${noteId}`, method: 'delete' })
+
 export const getArticleLearningInsights = (textId) =>
   request({ url: `/api/student/agent/article-insights/${textId}`, method: 'get' })
 
