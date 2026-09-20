@@ -8,6 +8,10 @@ CREATE TABLE IF NOT EXISTS _word_dup_map (
   PRIMARY KEY (old_id)
 );
 
+-- V55 may be interrupted while deleting a large vocabulary_books table.
+-- Clear a partial mapping so a retry starts from a consistent snapshot.
+TRUNCATE TABLE _word_dup_map;
+
 INSERT INTO _word_dup_map (old_id, new_id)
 SELECT w.id, keeper.min_id
 FROM words w
@@ -18,7 +22,11 @@ WHERE w.deleted=0 AND w.id != keeper.min_id;
 -- 2. vocabulary_books：多个旧词可能同时映射到同一个新词。
 --    先为每个 (student_id, new_word_id) 选一条记录，删除其余记录，
 --    再迁移保留记录，避免 uk_student_word 冲突。
-CREATE TEMPORARY TABLE _v55_vocab_keep AS
+CREATE TEMPORARY TABLE _v55_vocab_keep (
+  keep_id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO _v55_vocab_keep (keep_id)
 SELECT COALESCE(
          MIN(CASE WHEN m.old_id IS NULL THEN vb.id END),
          MIN(vb.id)
