@@ -168,4 +168,18 @@ public class AsyncConfig {
         log.info("Campaign collection thread pool initialized: core=2, max=4, queue=100");
         return executor;
     }
+
+    @Bean(name = "articleInsightExecutor")
+    public Executor articleInsightExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(64);
+        executor.setThreadNamePrefix("article-insight-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        executor.initialize();
+        return executor;
+    }
 }

@@ -9,6 +9,7 @@ import com.english.entity.Class;
 import com.english.exception.BusinessException;
 import com.english.mapper.*;
 import com.english.service.*;
+import com.english.service.impl.ArticleInsightService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,6 +79,9 @@ class StudentLearningControllerTest {
 
     @Mock
     private TextLearningRecordMapper textLearningRecordMapper;
+
+    @Mock
+    private ArticleInsightService articleInsightService;
 
     @Mock
     private WordNetService wordNetService;
@@ -328,6 +332,7 @@ class StudentLearningControllerTest {
         TextLearningRecord record = new TextLearningRecord();
         record.setId(100L);
         record.setStudentId(1L);
+        record.setTextId(5L);
         when(textLearningRecordMapper.selectById(100L)).thenReturn(record);
 
         mockMvc.perform(post("/api/student/learning/records/100/complete"))
@@ -336,6 +341,7 @@ class StudentLearningControllerTest {
                 .andExpect(jsonPath("$.data").value("阅读已完成"));
 
         verify(learningRecordsService).completeReadingSession(100L);
+        verify(articleInsightService).requestAfterCompletion(1L, 5L);
     }
 
     @Test
@@ -373,6 +379,7 @@ class StudentLearningControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.message").value("课文已标记为完成"));
+        verify(articleInsightService).requestAfterCompletion(1L, 5L);
     }
 
     @Test

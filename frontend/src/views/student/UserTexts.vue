@@ -113,6 +113,7 @@
               <el-button size="small" type="primary" @click.stop="previewItem(item)">
                 <el-icon><View /></el-icon> 预览
               </el-button>
+              <el-button v-if="item._type !== 'video'" size="small" @click.stop="openWritingCoach(item)">小芽点评作文</el-button>
               <el-button size="small" @click.stop="item._type === 'video' ? editVideoItem(item) : editText(item)">
                 <el-icon><Edit /></el-icon> 编辑
               </el-button>
@@ -133,6 +134,17 @@
         </div>
       </div>
     </el-card>
+
+    <el-dialog v-model="writingCoachVisible" title="请小芽点评我的英语作文" width="min(700px, 94vw)">
+      <p class="writing-coach-note">你可以先修改下方内容。只有点击“发送作文给小芽”后，这段文字才会发送给平台配置的 AI 服务；最多 2000 字。</p>
+      <el-input v-model="writingDraft" type="textarea" :rows="10" maxlength="2000" show-word-limit placeholder="在这里粘贴或修改你的英语作文" />
+      <p v-if="writingWasTruncated" class="writing-coach-note">原文较长，已预填前 2000 字；可选择需要点评的段落。</p>
+      <div v-if="writingFeedback" class="writing-feedback"><strong>小芽的反馈</strong><p>{{ writingFeedback }}</p></div>
+      <template #footer>
+        <el-button @click="writingCoachVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="writingFeedbackLoading" :disabled="!writingDraft.trim()" @click="sendWritingForFeedback">发送作文给小芽</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 上传对话框 -->
     <el-dialog
@@ -520,6 +532,7 @@ import { getClipboardImageFile } from '@/utils/clipboardImage'
 import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
 import { getPublicContentTags } from '@/api/admin'
+import { requestWritingFeedback } from '@/api/learningAgent'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { VideoPlay } from '@element-plus/icons-vue'
 
@@ -537,6 +550,11 @@ const likeLoading = ref(false)
 const showUploadDialog = ref(false)
 const showEditDialog = ref(false)
 const showDetailDialog = ref(false)
+const writingCoachVisible = ref(false)
+const writingDraft = ref('')
+const writingFeedback = ref('')
+const writingFeedbackLoading = ref(false)
+const writingWasTruncated = ref(false)
 const searchKeyword = ref('')
 const selectedDifficulty = ref('')
 const myTexts = ref([])
@@ -558,6 +576,31 @@ const handleItemClick = (item) => {
     playVideo(item)
   } else {
     studyText(item)
+  }
+}
+
+const openWritingCoach = (item) => {
+  const original = item?.contentType === 'MARKDOWN' ? item.markdownContent : item?.content
+  const fullDraft = typeof original === 'string' ? original : ''
+  writingDraft.value = fullDraft.slice(0, 2000)
+  writingWasTruncated.value = fullDraft.length > 2000
+  writingFeedback.value = ''
+  writingCoachVisible.value = true
+}
+
+const sendWritingForFeedback = async () => {
+  if (!writingDraft.value.trim() || writingFeedbackLoading.value) return
+  writingFeedbackLoading.value = true
+  try {
+    const response = await requestWritingFeedback(writingDraft.value.trim())
+    if (response?.code !== 200 || !response.data?.response) {
+      throw new Error(response?.message || '暂时没有得到点评')
+    }
+    writingFeedback.value = response.data.response
+  } catch (error) {
+    ElMessage.error(error?.message || '小芽暂时无法点评，请稍后再试')
+  } finally {
+    writingFeedbackLoading.value = false
   }
 }
 
@@ -1760,6 +1803,9 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
+.writing-coach-note { color: #61786d; font-size: 13px; line-height: 1.7; }
+.writing-feedback { margin-top: 16px; padding: 16px; border-radius: 12px; background: #eff9f2; color: #285d44; }
+.writing-feedback p { margin: 10px 0 0; white-space: pre-wrap; line-height: 1.7; }
 </style>
 
 <style>

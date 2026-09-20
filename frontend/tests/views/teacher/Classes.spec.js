@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 
+const routerPush = vi.hoisted(() => vi.fn())
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPush })
+}))
+
 vi.mock('element-plus', () => ({
   ElMessage: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
   ElMessageBox: { confirm: vi.fn().mockResolvedValue('confirm') }
@@ -75,5 +81,11 @@ describe('Teacher Classes.vue', () => {
   it('has currentClassStudents as empty array', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.currentClassStudents).toEqual([])
+  })
+
+  it('opens the selected teaching class learning overview', () => {
+    const wrapper = createWrapper()
+    wrapper.vm.openClassOverview({ id: 42 })
+    expect(routerPush).toHaveBeenCalledWith('/teacher/classes/42')
   })
 })

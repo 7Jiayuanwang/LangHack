@@ -10,6 +10,45 @@ export const getLearningAgentContentRecommendations = (count = 6) =>
     params: { count }
   })
 
+export const getLearningAgentStudyLoop = () =>
+  request({ url: '/api/student/agent/study-loop', method: 'get' })
+
+export const getXiaoyaGrowth = () =>
+  request({ url: '/api/student/agent/growth', method: 'get' })
+
+export const getXiaoyaGrowthSummary = () =>
+  request({ url: '/api/student/agent/growth/summary', method: 'get' })
+
+export const addXiaoyaExternalLearning = (data) =>
+  request({ url: '/api/student/agent/growth/external', method: 'post', data })
+
+export const listXiaoyaExternalLearning = (page = 1) =>
+  request({ url: '/api/student/agent/growth/external', method: 'get', params: { page } })
+
+export const deleteXiaoyaExternalLearning = (noteId) =>
+  request({ url: `/api/student/agent/growth/external/${noteId}`, method: 'delete' })
+
+export const getArticleLearningInsights = (textId) =>
+  request({ url: `/api/student/agent/article-insights/${textId}`, method: 'get' })
+
+export const getUnreadArticleInsights = () =>
+  request({ url: '/api/student/agent/article-insights/unread', method: 'get' })
+
+export const markArticleInsightRead = (messageId) =>
+  request({ url: `/api/student/agent/article-insights/messages/${messageId}/read`, method: 'post' })
+
+// Only invoked after the student explicitly submits a visible draft for feedback.
+export const requestWritingFeedback = (draft) =>
+  request({
+    url: '/api/student/ai-qa/chat',
+    method: 'post',
+    data: {
+      scene: 'LEARNING_AGENT',
+      userQuestion: '这是我自己写的英语作文。请先指出两个具体优点，再指出最重要的两个可改进处，并给出简短修改示例。不要编造未提供的内容。',
+      selectedText: draft
+    }
+  })
+
 export const saveLearningAgentOnboarding = (data) =>
   request({ url: '/api/student/agent/onboarding', method: 'put', data })
 

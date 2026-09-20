@@ -80,6 +80,25 @@ public class ConversationService {
         return messageMapper.selectList(qw);
     }
 
+    /** Bounded, owner-checked text history for a learner-authorized provider failover. */
+    @UseMaster
+    public List<AiMessage> getRecentMessagesBefore(Long conversationId, Long userId,
+                                                    Long beforeMessageId, int limit) {
+        getOwnedConversation(conversationId, userId);
+        if (beforeMessageId == null) return Collections.emptyList();
+        int safeLimit = Math.min(Math.max(limit, 1), 8);
+        QueryWrapper<AiMessage> query = new QueryWrapper<>();
+        query.select("id", "role", "content")
+                .eq("conversation_id", conversationId)
+                .lt("id", beforeMessageId)
+                .in("role", "user", "assistant")
+                .orderByDesc("id")
+                .last("LIMIT " + safeLimit);
+        List<AiMessage> messages = messageMapper.selectList(query);
+        Collections.reverse(messages);
+        return messages;
+    }
+
     public Page<AiConversation> listUserConversations(Long userId, int page, int size) {
         Page<AiConversation> pageReq = new Page<>(page, size);
         QueryWrapper<AiConversation> qw = new QueryWrapper<>();

@@ -204,7 +204,7 @@ const loadDashboardData = async () => {
 }
 
 const viewClassDetail = (classItem) => {
-  router.push(`/teacher/classes?id=${classItem.id}`)
+  router.push(`/teacher/classes/${classItem.id}`)
 }
 
 const formatTime = (time) => {

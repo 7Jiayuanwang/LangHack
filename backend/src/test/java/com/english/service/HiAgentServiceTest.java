@@ -371,6 +371,37 @@ class HiAgentServiceTest {
                 any(ResponseExtractor.class));
     }
 
+    @Test
+    void chatQueryStreaming_initialErrorLeavesOutputUntouchedForProviderFallback() throws Exception {
+        when(config.getQaApiKey()).thenReturn("qa-key");
+        when(config.getQaAppId()).thenReturn("qa-app");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getUserId()).thenReturn("test-user");
+
+        ClientHttpRequest upstreamRequest = mock(ClientHttpRequest.class);
+        when(upstreamRequest.getHeaders()).thenReturn(new org.springframework.http.HttpHeaders());
+        when(upstreamRequest.getBody()).thenReturn(new ByteArrayOutputStream());
+        ClientHttpResponse upstreamResponse = mock(ClientHttpResponse.class);
+        when(upstreamResponse.getStatusCode()).thenReturn(HttpStatus.OK);
+        when(upstreamResponse.getBody()).thenReturn(new ByteArrayInputStream(
+                "event: error\ndata: {\"message\":\"provider unavailable\"}\n\n"
+                        .getBytes(StandardCharsets.UTF_8)));
+        when(restTemplate.execute(any(URI.class), eq(HttpMethod.POST),
+                any(RequestCallback.class), any(ResponseExtractor.class)))
+                .thenAnswer(invocation -> {
+                    RequestCallback requestCallback = invocation.getArgument(2);
+                    ResponseExtractor<?> responseExtractor = invocation.getArgument(3);
+                    requestCallback.doWithRequest(upstreamRequest);
+                    return responseExtractor.extractData(upstreamResponse);
+                });
+
+        ResponseEntity<StreamingResponseBody> response = hiAgentService.chatQueryStreamingWithQACredentials(
+                "conv-stream", "prompt", 42L, answer -> {});
+        ByteArrayOutputStream browserResponse = new ByteArrayOutputStream();
+        assertThrows(BusinessException.class, () -> response.getBody().writeTo(browserResponse));
+        assertEquals(0, browserResponse.size());
+    }
+
     // ==================== Destroy ====================
 
     @Test

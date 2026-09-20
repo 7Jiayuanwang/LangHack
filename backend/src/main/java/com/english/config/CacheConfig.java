@@ -122,6 +122,7 @@ public class CacheConfig extends CachingConfigurerSupport {
         configs.put("wordDetail",      defaultConfig.entryTtl(Duration.ofHours(1)));      // Word details: 1 hour (static reference data)
         configs.put("learner-profile:user",  defaultConfig.entryTtl(Duration.ofMinutes(10)));  // Learner profile: 10 min (computed on read)
         configs.put("learner-profile:class", defaultConfig.entryTtl(Duration.ofMinutes(10)));  // Class profile summary: 10 min
+        configs.put("agent:qa-upstream", defaultConfig.entryTtl(Duration.ofHours(12)));  // Opaque QA session ID only
 
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(defaultConfig)

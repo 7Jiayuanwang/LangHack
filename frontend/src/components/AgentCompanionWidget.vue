@@ -10,7 +10,7 @@
       aria-label="小芽英语学习伙伴"
     >
       <header class="companion-header">
-        <AgentMascot :size="42" />
+        <AgentMascot :size="42" :stage="growthStage" />
         <div class="companion-title">
           <strong>小芽</strong>
           <span>你的英语学习伙伴</span>
@@ -62,29 +62,28 @@
           <button type="button" @click="refreshUnread">刷新</button>
         </div>
         <p v-if="notifications.length === 0" class="empty-messages">暂时没有待读消息。继续保持好奇心，今天也和英语见个面吧！</p>
-        <article v-for="item in notifications" :key="item.id" class="message-card">
-          <button type="button" class="message-title" :aria-expanded="selectedMessageId === item.id" @click="selectedMessageId = selectedMessageId === item.id ? null : item.id">
-            <span>{{ item.title }}</span><span aria-hidden="true">{{ selectedMessageId === item.id ? '−' : '+' }}</span>
+        <article v-for="item in notifications" :key="`${item.source}:${item.id}`" class="message-card">
+          <button type="button" class="message-title" :aria-expanded="selectedMessageId === `${item.source}:${item.id}`" @click="selectedMessageId = selectedMessageId === `${item.source}:${item.id}` ? null : `${item.source}:${item.id}`">
+            <span>{{ item.title }}</span><span aria-hidden="true">{{ selectedMessageId === `${item.source}:${item.id}` ? '−' : '+' }}</span>
           </button>
-          <template v-if="selectedMessageId === item.id">
+          <template v-if="selectedMessageId === `${item.source}:${item.id}`">
             <p>{{ item.content }}</p>
-            <button type="button" class="mark-read" @click="markRead(item.id)">我已读过</button>
+            <button v-if="item.textId" type="button" class="message-article-link" @click="navigate(`/article/${item.textId}`)">回到这篇文章</button>
+            <button type="button" class="mark-read" @click="markRead(item)">我已读过</button>
           </template>
         </article>
       </div>
     </section>
 
     <button
-      ref="launcherRef"
       type="button"
       class="companion-launcher"
-      :style="launcherStyle"
       :aria-label="unreadCount ? `打开小芽，有 ${unreadCount} 条未读消息` : '打开小芽，开始英语学习对话'"
       aria-controls="agent-companion-panel"
       :aria-expanded="expanded"
-      @pointerdown="onDragStart"
+      @click="togglePanel"
     >
-      <AgentMascot :size="62" />
+      <AgentMascot :size="62" :stage="growthStage" />
       <span class="launcher-name">小芽</span>
       <span v-if="unreadCount" class="unread-badge" aria-label="未读消息">{{ badgeLabel }}</span>
     </button>
@@ -96,6 +95,7 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getUnreadNotifications, markNotificationRead } from '@/api/notification'
+import { getUnreadArticleInsights, getXiaoyaGrowthSummary, markArticleInsightRead } from '@/api/learningAgent'
 import AgentMascot from '@/components/AgentMascot.vue'
 
 // The full chat interface is loaded only when the student first opens 小芽.
@@ -115,90 +115,37 @@ const notifications = ref([])
 const selectedMessageId = ref(null)
 const articleTitle = ref('')
 const selectedText = ref('')
+const growthStage = ref('SEED')
 const unreadCount = computed(() => notifications.value.length)
 const badgeLabel = computed(() => unreadCount.value > 99 ? '99+' : String(unreadCount.value))
 let refreshTimer = null
 
-// ── Drag logic ──
-const launcherRef = ref(null)
-const DRAG_THRESHOLD = 5
-const STORAGE_KEY = 'xiaoya-launcher-pos'
-const dragOffset = ref(loadPosition())
-const isDragging = ref(false)
-
-function loadPosition() {
+const refreshGrowth = async () => {
+  if (!visible.value) return
+  const token = userStore.token
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) { const p = JSON.parse(raw); return { x: p.x || 0, y: p.y || 0 } }
-  } catch { /* ignore */ }
-  return { x: 0, y: 0 }
-}
-
-function savePosition(pos) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pos)) } catch { /* ignore */ }
-}
-
-const launcherStyle = computed(() => {
-  const { x, y } = dragOffset.value
-  if (x === 0 && y === 0) return {}
-  return { transform: `translate(${x}px, ${y}px)` }
-})
-
-function clampPosition(x, y) {
-  const el = launcherRef.value
-  if (!el) return { x, y }
-  const rect = el.getBoundingClientRect()
-  const w = rect.width, h = rect.height
-  // 计算按钮在无 translate 时的原始位置
-  const origLeft = rect.left - dragOffset.value.x
-  const origTop = rect.top - dragOffset.value.y
-  const minX = -origLeft
-  const maxX = window.innerWidth - origLeft - w
-  const minY = -origTop
-  const maxY = window.innerHeight - origTop - h
-  return {
-    x: Math.round(Math.min(Math.max(x, minX), maxX)),
-    y: Math.round(Math.min(Math.max(y, minY), maxY))
-  }
-}
-
-function onDragStart(e) {
-  // 只响应主按键（左键/触摸）
-  if (e.button && e.button !== 0) return
-  const startX = e.clientX, startY = e.clientY
-  const origX = dragOffset.value.x, origY = dragOffset.value.y
-  let moved = false
-
-  const onMove = (ev) => {
-    const dx = ev.clientX - startX, dy = ev.clientY - startY
-    if (!moved && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
-    moved = true
-    isDragging.value = true
-    dragOffset.value = clampPosition(origX + dx, origY + dy)
-  }
-
-  const onUp = () => {
-    document.removeEventListener('pointermove', onMove)
-    document.removeEventListener('pointerup', onUp)
-    if (moved) {
-      savePosition(dragOffset.value)
-      // 延迟重置，防止 pointerup 同时触发 click
-      setTimeout(() => { isDragging.value = false }, 50)
-    } else {
-      isDragging.value = false
-      togglePanel()
+    const response = await getXiaoyaGrowthSummary()
+    if (visible.value && userStore.token === token && response?.code === 200 && response.data?.stage) {
+      growthStage.value = response.data.stage
     }
+  } catch {
+    // Growth is optional UI; a temporary failure must not interrupt chat.
   }
-
-  document.addEventListener('pointermove', onMove)
-  document.addEventListener('pointerup', onUp)
 }
 
 const refreshUnread = async () => {
   if (!visible.value) return
   try {
-    const response = await getUnreadNotifications()
-    if (response?.code === 200) notifications.value = Array.isArray(response.data) ? response.data : []
+    const [globalResult, insightResult] = await Promise.allSettled([
+      getUnreadNotifications(), getUnreadArticleInsights()
+    ])
+    const globalMessages = globalResult.status === 'fulfilled' && globalResult.value?.code === 200
+      ? (Array.isArray(globalResult.value.data) ? globalResult.value.data : []).map(item => ({ ...item, source: 'global' }))
+      : notifications.value.filter(item => item.source === 'global')
+    const insightMessages = insightResult.status === 'fulfilled' && insightResult.value?.code === 200
+      ? (Array.isArray(insightResult.value.data) ? insightResult.value.data : []).map(item => ({ ...item, source: 'insight' }))
+      : notifications.value.filter(item => item.source === 'insight')
+    notifications.value = [...insightMessages, ...globalMessages]
   } catch {
     // A temporary notification failure must not interrupt reading or chat.
   }
@@ -208,6 +155,7 @@ const startRefreshing = () => {
   if (refreshTimer) clearInterval(refreshTimer)
   if (!visible.value) return
   refreshUnread()
+  refreshGrowth()
   refreshTimer = setInterval(refreshUnread, 60 * 1000)
 }
 
@@ -223,7 +171,7 @@ const togglePanel = () => {
   }
   opened.value = true
   expanded.value = !expanded.value
-  if (expanded.value) refreshUnread()
+  if (expanded.value) { refreshUnread(); refreshGrowth() }
 }
 
 const closePanel = () => { expanded.value = false }
@@ -233,11 +181,13 @@ const openMessages = () => {
   refreshUnread()
 }
 
-const markRead = async (id) => {
+const markRead = async (item) => {
   try {
-    const response = await markNotificationRead(id)
+    const response = item.source === 'insight'
+      ? await markArticleInsightRead(item.id)
+      : await markNotificationRead(item.id)
     if (response?.code === 200) {
-      notifications.value = notifications.value.filter(item => item.id !== id)
+      notifications.value = notifications.value.filter(candidate => candidate.source !== item.source || candidate.id !== item.id)
       selectedMessageId.value = null
     }
   } catch {
@@ -264,7 +214,7 @@ const focusArticleTool = async (selector) => {
 }
 
 const onVisibilityChange = () => {
-  if (!document.hidden) refreshUnread()
+  if (!document.hidden) { refreshUnread(); refreshGrowth() }
 }
 
 const onKeyDown = (event) => {
@@ -277,6 +227,7 @@ watch(visible, (show) => {
     stopRefreshing()
     closePanel()
     notifications.value = []
+    growthStage.value = 'SEED'
   }
 }, { immediate: true })
 
@@ -284,32 +235,38 @@ watch(() => userStore.token, () => {
   opened.value = false
   activeTab.value = 'chat'
   selectedMessageId.value = null
+  growthStage.value = 'SEED'
+  refreshGrowth()
 })
 
 watch(() => route.fullPath, () => {
   closePanel()
   articleTitle.value = ''
   selectedText.value = ''
+  refreshGrowth()
 })
 
 onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange)
   document.addEventListener('keydown', onKeyDown)
+  window.addEventListener('langhack:agent-messages-changed', refreshUnread)
+  window.addEventListener('langhack:xiaoya-growth-changed', refreshGrowth)
 })
 
 onUnmounted(() => {
   stopRefreshing()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   document.removeEventListener('keydown', onKeyDown)
+  window.removeEventListener('langhack:agent-messages-changed', refreshUnread)
+  window.removeEventListener('langhack:xiaoya-growth-changed', refreshGrowth)
 })
 </script>
 
 <style scoped>
 .companion-widget { position: relative; z-index: 3000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
 .companion-scrim { position: fixed; inset: 0; background: rgba(14, 38, 31, .18); z-index: 0; }
-.companion-launcher { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; min-height: 84px; padding: 4px 4px 6px; border: 1px solid #d4f0e3; border-radius: 26px; background: rgba(255, 255, 255, .97); box-shadow: 0 8px 28px rgba(24, 94, 69, .2); cursor: grab; color: #176e51; touch-action: none; user-select: none; -webkit-user-select: none; }
-.companion-launcher:active { cursor: grabbing; }
-.companion-launcher:hover { box-shadow: 0 12px 30px rgba(24, 94, 69, .27); }
+.companion-launcher { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; min-height: 84px; padding: 4px 4px 6px; border: 1px solid #d4f0e3; border-radius: 26px; background: rgba(255, 255, 255, .97); box-shadow: 0 8px 28px rgba(24, 94, 69, .2); cursor: pointer; color: #176e51; }
+.companion-launcher:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(24, 94, 69, .27); }
 .companion-launcher:focus-visible, .companion-panel button:focus-visible { outline: 3px solid #21a474; outline-offset: 2px; }
 .launcher-name { margin-top: -4px; font-size: 12px; font-weight: 800; }
 .unread-badge { position: absolute; top: -7px; right: -6px; display: grid; place-items: center; min-width: 23px; height: 23px; padding: 0 5px; border: 2px solid white; border-radius: 14px; background: #ef4967; color: white; font-size: 11px; font-weight: 800; }
@@ -339,6 +296,7 @@ onUnmounted(() => {
 .message-title { display: flex; justify-content: space-between; width: 100%; border: 0; background: none; color: #245d48; font-weight: 700; text-align: left; cursor: pointer; }
 .message-card p { margin: 10px 0; color: #526b5d; font-size: 13px; line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
 .mark-read { padding: 6px 12px; border: 0; border-radius: 8px; background: #e4f5eb; color: #137e54; font-weight: 700; cursor: pointer; }
+.message-article-link { margin-right: 8px; padding: 6px 12px; border: 0; border-radius: 8px; background: #eaf3ff; color: #315e9b; font-weight: 700; cursor: pointer; }
 .is-immersive .companion-launcher { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
 .is-immersive .companion-panel { bottom: calc(114px + env(safe-area-inset-bottom, 0px)); height: min(620px, calc(100dvh - 138px)); }
 .is-chat-page .companion-launcher { top: calc(70px + env(safe-area-inset-top, 0px)); bottom: auto; }

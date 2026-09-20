@@ -23,3 +23,15 @@ export function getStudentScores(studentId) {
 export function getTeacherStats() {
   return request({ url: '/api/teacher/stats', method: 'get' })
 }
+
+export function getClassLearningOverview(classId) {
+  return request({
+    url: `/api/teacher/classes/${encodeURIComponent(classId)}/learning-overview`,
+    method: 'get',
+    skipErrorHandler: true
+  })
+}
+
+export function getMyPlatformClasses(page = 1) {
+  return request({ url: '/api/classes', method: 'get', params: { page, size: 100 }, skipErrorHandler: true })
+}

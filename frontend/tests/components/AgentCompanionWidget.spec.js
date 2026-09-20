@@ -6,7 +6,10 @@ const state = vi.hoisted(() => ({
   route: { path: '/articles', fullPath: '/articles', meta: {} },
   push: vi.fn(),
   getUnread: vi.fn(),
-  markRead: vi.fn()
+  markRead: vi.fn(),
+  getUnreadInsights: vi.fn(),
+  markInsightRead: vi.fn(),
+  getGrowth: vi.fn()
 }))
 
 vi.mock('vue-router', () => ({
@@ -18,6 +21,11 @@ vi.mock('@/api/notification', () => ({
   getUnreadNotifications: state.getUnread,
   markNotificationRead: state.markRead
 }))
+vi.mock('@/api/learningAgent', () => ({
+  getUnreadArticleInsights: state.getUnreadInsights,
+  markArticleInsightRead: state.markInsightRead,
+  getXiaoyaGrowthSummary: state.getGrowth
+}))
 vi.mock('@/views/shared/AiQaPage.vue', () => ({
   __esModule: true,
   default: {
@@ -27,7 +35,7 @@ vi.mock('@/views/shared/AiQaPage.vue', () => ({
   }
 }))
 vi.mock('@/components/AgentMascot.vue', () => ({
-  default: { name: 'AgentMascot', props: ['size'], template: '<div class="mascot-stub" />' }
+  default: { name: 'AgentMascot', props: ['size', 'stage'], template: '<div class="mascot-stub" />' }
 }))
 
 import AgentCompanionWidget from '@/components/AgentCompanionWidget.vue'
@@ -48,6 +56,9 @@ describe('AgentCompanionWidget', () => {
     state.route.meta = {}
     state.getUnread.mockResolvedValue({ code: 200, data: [] })
     state.markRead.mockResolvedValue({ code: 200, data: '已标记为已读' })
+    state.getUnreadInsights.mockResolvedValue({ code: 200, data: [] })
+    state.markInsightRead.mockResolvedValue({ code: 200, data: '已标记为已读' })
+    state.getGrowth.mockResolvedValue({ code: 200, data: { stage: 'LEAF' } })
   })
 
   afterEach(() => {
@@ -64,6 +75,12 @@ describe('AgentCompanionWidget', () => {
     expect(widget.findComponent({ name: 'AiQaPage' }).props()).toMatchObject({
       apiPath: '/api/student/ai-qa/chat/stream', agentMode: true, embedded: true
     })
+  })
+
+  it('shows the learner\'s plant stage on the persistent launcher', async () => {
+    const widget = mountWidget()
+    await flushPromises()
+    expect(widget.findAllComponents({ name: 'AgentMascot' }).at(-1).props('stage')).toBe('LEAF')
   })
 
   it('shows unread count and only marks a message read after an explicit click', async () => {
@@ -90,6 +107,26 @@ describe('AgentCompanionWidget', () => {
     await widget.findAll('.companion-tabs button')[1].trigger('click')
     await widget.findAll('.companion-tools button')[0].trigger('click')
     expect(state.push).toHaveBeenCalledWith('/student/learning-agent')
+  })
+
+  it('shows personalized article insights without confusing their ids with global notices', async () => {
+    state.getUnread.mockResolvedValue({ code: 200, data: [{ id: 7, title: '公告', content: '欢迎使用' }] })
+    state.getUnreadInsights.mockResolvedValue({ code: 200, data: [
+      { id: 7, textId: 42, title: '小芽 · 文章知识点', content: 'resilience：韧性' }
+    ] })
+    const widget = mountWidget()
+    await flushPromises()
+    expect(widget.find('.unread-badge').text()).toBe('2')
+
+    await widget.find('.companion-launcher').trigger('click')
+    await widget.findAll('.companion-tabs button')[2].trigger('click')
+    await widget.findAll('.message-title')[0].trigger('click')
+    expect(widget.find('.message-article-link').exists()).toBe(true)
+    await widget.findAll('.mark-read')[0].trigger('click')
+    await flushPromises()
+    expect(state.markInsightRead).toHaveBeenCalledWith(7)
+    expect(state.markRead).not.toHaveBeenCalled()
+    expect(widget.find('.unread-badge').text()).toBe('1')
   })
 
   it('passes the current article title into 小芽 chat', async () => {

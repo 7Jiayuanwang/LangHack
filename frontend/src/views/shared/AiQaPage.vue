@@ -66,7 +66,8 @@
           <div class="context-body">
             <div class="context-label">
               <el-icon><ChatLineSquare /></el-icon>
-              <span>选中段落</span>
+              <span>{{ agentMode ? '当前学习材料' : '选中段落' }}</span>
+              <button type="button" class="context-clear" @click="selectedText = ''">清除材料</button>
             </div>
             <p class="context-text">{{ selectedText }}</p>
             <p class="context-source" v-if="articleTitle">
@@ -145,6 +146,10 @@
             <el-icon :size="20"><Top /></el-icon>
           </button>
         </div>
+        <label v-if="isCompanion" class="fallback-history-consent">
+          <input v-model="allowFallbackHistory" type="checkbox" :disabled="loading" />
+          <span>主服务故障时，同意把本会话最近最多 8 条文字消息（约 4 轮）交给备用 AI，以延续上下文。历史回答可能含个人信息；默认关闭，切换对话后需重新选择。</span>
+        </label>
       </div>
     </div>
 
@@ -207,6 +212,7 @@ const articleTitle = ref('')
 const isCompanion = computed(() => props.agentMode || Boolean(articleTitle.value))
 const messages = ref([])
 const inputMessage = ref('')
+const allowFallbackHistory = ref(false)
 const loading = ref(false)
 const chatContainer = ref(null)
 let abortController = null
@@ -237,7 +243,20 @@ const candidateQuestions = computed(() => {
 })
 
 onMounted(() => {
-  selectedText.value = props.embedded ? props.contextText : route.query.text || ''
+  let pendingWrongQuestion = ''
+  if (!props.embedded && props.agentMode) {
+    try {
+      const pending = sessionStorage.getItem('xiaoya:pending-question-context')
+      sessionStorage.removeItem('xiaoya:pending-question-context')
+      if (pending) {
+        const parsed = JSON.parse(pending)
+        if (typeof parsed.text === 'string' && Date.now() - parsed.createdAt < 5 * 60 * 1000) {
+          pendingWrongQuestion = parsed.text
+        }
+      }
+    } catch { /* The companion still opens without prefilled context. */ }
+  }
+  selectedText.value = props.embedded ? props.contextText : route.query.text || pendingWrongQuestion
   articleTitle.value = props.embedded ? props.contextTitle : route.query.articleTitle || ''
   // 阅读页的小芽伴读只预填问题；仅用户主动点击“试试看”时自动发出自测请求。
   inputMessage.value = !props.embedded && typeof route.query.question === 'string' ? route.query.question : ''
@@ -275,6 +294,7 @@ const toggleSidebar = async () => {
 const startNewConversation = () => {
   currentConversationId.value = null
   messages.value = []
+  allowFallbackHistory.value = false
   sidebarOpen.value = false
 }
 
@@ -283,6 +303,8 @@ const loadConversation = async (conv) => {
     const res = await getConversationDetail(conv.id)
     if (res?.code === 200) {
       currentConversationId.value = conv.id
+      allowFallbackHistory.value = false
+      selectedText.value = ''
       messages.value = (res.data?.messages || []).map(m => ({
         role: m.role,
         content: m.role === 'assistant'
@@ -380,7 +402,8 @@ const sendMessage = async () => {
         selectedText: selectedText.value,
         articleContext: props.embedded ? articleTitle.value : route.query.context || '',
         conversationId: currentConversationId.value,
-        scene: isCompanion.value ? 'LEARNING_AGENT' : 'QA'
+        scene: isCompanion.value ? 'LEARNING_AGENT' : 'QA',
+        allowFallbackHistory: isCompanion.value && allowFallbackHistory.value
       })
     })
 
@@ -582,6 +605,7 @@ onBeforeUnmount(() => {
 .context-accent { width: 4px; background: linear-gradient(180deg, #197fe6, #3b82f6); flex-shrink: 0; }
 .context-body { padding: 10px 14px; flex: 1; min-width: 0; }
 .context-label { display: flex; align-items: center; gap: 6px; color: #197fe6; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.context-clear { margin-left: auto; padding: 2px 4px; border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-transform: none; }
 .context-text { font-size: 13px; line-height: 1.5; color: #475569; margin: 0 0 6px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .context-source { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #64748b; margin: 0; }
 
@@ -632,6 +656,8 @@ onBeforeUnmount(() => {
 .qa-input:disabled { background: #f8fafc; color: #94a3b8; }
 .qa-send-btn { width: 46px; height: 46px; flex-shrink: 0; border: none; border-radius: 50%; background: linear-gradient(135deg, #197fe6, #3b82f6); color: white; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 8px 18px rgba(25, 127, 230, 0.24); }
 .qa-send-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.fallback-history-consent { display: flex; align-items: flex-start; gap: 8px; margin-top: 9px; color: #64748b; font-size: 11px; line-height: 1.5; cursor: pointer; }
+.fallback-history-consent input { flex: none; margin-top: 2px; accent-color: #228b67; }
 
 .ai-qa-page.is-companion { background: var(--xy-brand-50); }
 .is-companion .qa-context-bar { background: var(--xy-brand-50); }

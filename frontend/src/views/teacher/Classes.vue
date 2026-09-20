@@ -14,7 +14,13 @@
       <!-- 班级列表 -->
       <div class="table-wrapper">
       <el-table :data="classes" stripe>
-        <el-table-column prop="name" label="班级名称" min-width="150" />
+        <el-table-column label="班级名称" min-width="150">
+          <template #default="scope">
+            <el-button link type="primary" @click="openClassOverview(scope.row)">
+              {{ scope.row.name }}
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="课序号" min-width="150">
           <template #default="scope">
             {{ scope.row.courseSequence || '-' }}
@@ -36,9 +42,12 @@
             {{ formatTime(scope.row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="290" fixed="right">
           <template #default="scope">
             <div class="action-buttons">
+              <el-button size="small" type="primary" plain @click="openClassOverview(scope.row)">
+                学情
+              </el-button>
               <el-button 
                 size="small" 
                 type="primary" 
@@ -203,10 +212,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { User, Download, MoreFilled, Edit, Delete, Plus } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import XyPageHeader from '@/components/ui/XyPageHeader.vue'
+
+const router = useRouter()
 
 // 响应式数据
 const classes = ref([])
@@ -251,6 +263,10 @@ const classRules = {
   courseId: [
     { required: true, message: '请选择课程', trigger: 'change' }
   ]
+}
+
+const openClassOverview = (classItem) => {
+  router.push(`/teacher/classes/${classItem.id}`)
 }
 
 // 方法
