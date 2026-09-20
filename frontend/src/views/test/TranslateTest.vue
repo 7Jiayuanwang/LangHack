@@ -218,7 +218,7 @@ const translateSelectedText = async () => {
 
 .translated-text p {
   background: #e6f7ff;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--xy-brand-600);
 }
 
 .loading-content {

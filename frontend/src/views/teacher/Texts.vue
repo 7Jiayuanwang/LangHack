@@ -980,8 +980,8 @@ defineExpose({ loadTexts })
 }
 
 .stat-card.active {
-  border-color: #409eff;
-  background-color: #ecf5ff;
+  border-color: var(--xy-brand-600);
+  background-color: var(--xy-brand-50);
 }
 
 .stat-card.active .stat-value {
@@ -996,7 +996,7 @@ defineExpose({ loadTexts })
 .stat-value {
   font-size: 32px;
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
   margin-bottom: 8px;
 }
 
@@ -1162,9 +1162,9 @@ defineExpose({ loadTexts })
   transition: all 0.2s ease;
 }
 .more-action-btn:hover {
-  background-color: #ecf5ff;
-  border-color: #409eff;
-  color: #409eff;
+  background-color: var(--xy-brand-50);
+  border-color: var(--xy-brand-600);
+  color: var(--xy-brand-600);
 }
 
 /* "重新生成改写文章"弹窗内容 */
@@ -1180,7 +1180,7 @@ defineExpose({ loadTexts })
   padding: 12px 14px;
   background-color: #f8f9fa;
   border-radius: 6px;
-  border-left: 3px solid #409eff;
+  border-left: 3px solid var(--xy-brand-600);
 }
 .regen-target-label {
   font-size: 12px;
@@ -1261,7 +1261,7 @@ defineExpose({ loadTexts })
 .edit-quiz-item-num {
   font-size: 14px;
   font-weight: 600;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .edit-quiz-options {

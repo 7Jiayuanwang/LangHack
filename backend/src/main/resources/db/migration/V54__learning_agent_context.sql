@@ -1,4 +1,6 @@
 -- 学习伙伴智能体：用户主动目标、兴趣、偏好与可管理记忆。
+-- 智能体分支原用 V49；合并后 V49 属于 sentence_favorites。
+-- 这些表用 IF NOT EXISTS 保持幂等，以兼容已运行旧智能体分支的环境。
 
 CREATE TABLE IF NOT EXISTS learner_agent_profiles (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -60,3 +62,19 @@ CREATE TABLE IF NOT EXISTS learner_memories (
     INDEX idx_learner_memories_user_status (user_id, status),
     INDEX idx_learner_memories_source (source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户可查看和管理的学习伙伴长期记忆';
+
+-- 若旧智能体分支已占用 Flyway V49，合并后的 V49__sentence_favorites.sql
+-- 不会再次执行；在此补建该表，避免已部署环境遗漏例句收藏功能。
+CREATE TABLE IF NOT EXISTS sentence_favorites (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  text_id BIGINT NOT NULL,
+  sentence VARCHAR(2000) NOT NULL,
+  sentence_hash BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(sentence, 256))) STORED,
+  created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_sentence_favorite (user_id, text_id, sentence_hash),
+  KEY idx_sentence_favorite_user_created (user_id, created_time),
+  KEY idx_sentence_favorite_text (text_id),
+  CONSTRAINT fk_sentence_favorite_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_sentence_favorite_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户例句收藏';

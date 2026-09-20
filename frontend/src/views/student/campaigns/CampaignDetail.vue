@@ -369,7 +369,7 @@ onMounted(() => {
   padding: 15px;
   background: #f5f7fa;
   border-radius: 8px;
-  border-left: 4px solid #409eff;
+  border-left: 4px solid var(--xy-brand-600);
 }
 
 .task-item.required {
@@ -394,7 +394,7 @@ onMounted(() => {
 }
 
 .task-score {
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-weight: bold;
 }
 
@@ -424,7 +424,7 @@ onMounted(() => {
 
 .info-icon {
   font-size: 24px;
-  color: #409eff;
+  color: var(--xy-brand-600);
   flex-shrink: 0;
 }
 
@@ -517,7 +517,7 @@ onMounted(() => {
 .award-score {
   margin-left: auto;
   font-weight: 600;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 @media (max-width: 768px) {

@@ -104,10 +104,10 @@ const availableVersions = computed(() => {
 }
 
 .version-tab:hover {
-  border-color: #409eff;
-  color: #409eff;
+  border-color: var(--xy-brand-600);
+  color: var(--xy-brand-600);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  box-shadow: 0 2px 8px rgba(23, 110, 81, 0.15);
 }
 
 .version-tab.active {

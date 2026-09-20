@@ -780,6 +780,6 @@ onMounted(() => {
 
 :deep(.el-divider__text) {
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 </style>

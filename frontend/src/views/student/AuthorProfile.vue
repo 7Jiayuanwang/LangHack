@@ -362,7 +362,7 @@ onMounted(() => {
   padding: 8px 24px;
   border: none;
   border-radius: 20px;
-  background: #409eff;
+  background: var(--xy-brand-600);
   color: #fff;
   font-size: 14px;
   cursor: pointer;
@@ -424,8 +424,8 @@ onMounted(() => {
   border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 .author-stats {
@@ -445,7 +445,7 @@ onMounted(() => {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  background: #409eff;
+  background: var(--xy-brand-600);
   color: #fff;
 }
 
@@ -558,9 +558,9 @@ onMounted(() => {
 }
 
 .tab-btn.active {
-  background: #409eff;
+  background: var(--xy-brand-600);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(23, 110, 81, 0.3);
 }
 
 /* Content Grid */
@@ -607,7 +607,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #409eff;
+  color: var(--xy-brand-600);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
@@ -672,8 +672,8 @@ onMounted(() => {
   border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
-  color: #409eff;
-  background: #ecf5ff;
+  color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 .card-meta {

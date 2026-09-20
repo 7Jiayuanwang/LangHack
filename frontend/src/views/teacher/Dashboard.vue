@@ -1,5 +1,6 @@
 <template>
   <div class="dashboard">
+    <XyPageHeader class="teacher-intro" title="教学概览" eyebrow="TEACHING OVERVIEW" description="班级、任务与学习进度，一眼看清需要关注的地方。" variant="compact" />
     <el-row :gutter="20">
       <el-col :xs="12" :sm="12" :md="6">
         <el-card class="stat-card">
@@ -121,6 +122,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getAuthHeader } from '@/utils/auth'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const router = useRouter()
 
@@ -226,9 +228,10 @@ onMounted(() => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
-  background: linear-gradient(to bottom, #f8fafc 0%, #ffffff 100%);
+  background: var(--xy-gradient-page);
   min-height: calc(100vh - 56px);
 }
+.teacher-intro { margin-bottom: 20px; }
 
 /* PC端大字号适配 */
 @media (min-width: 1200px) {
@@ -260,11 +263,11 @@ onMounted(() => {
 .stat-card {
   margin-bottom: 20px;
   border: none;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--xy-shadow-card);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 16px;
+  border-radius: var(--xy-radius-md);
   overflow: hidden;
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--xy-border);
 }
 
 .stat-card:hover {
@@ -398,9 +401,9 @@ onMounted(() => {
 .class-item:hover,
 .assignment-item:hover {
   background: #f0f7ff;
-  border-color: #409eff;
+  border-color: var(--xy-brand-600);
   transform: translateX(4px);
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.15);
+  box-shadow: 0 2px 8px rgba(23, 110, 81, 0.15);
 }
 
 .class-item:last-child,
@@ -421,7 +424,7 @@ onMounted(() => {
 
 .class-item:hover .class-info h4,
 .assignment-item:hover .assignment-info h4 {
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .class-info p,
@@ -455,7 +458,7 @@ onMounted(() => {
 
 .class-actions .el-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(23, 110, 81, 0.3);
 }
 
 .progress-info {

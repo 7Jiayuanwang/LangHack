@@ -199,7 +199,7 @@ onMounted(loadData)
   padding: 16px;
   text-align: center;
 }
-.stat-card.highlight { border-color: #197fe6; background: #eff6ff; }
+.stat-card.highlight { border-color: #197fe6; background: var(--xy-brand-50); }
 .stat-value { font-size: 28px; font-weight: 800; color: #1e293b; }
 .stat-card.highlight .stat-value { color: #197fe6; }
 .stat-label { font-size: 12px; color: #64748b; margin-top: 4px; }

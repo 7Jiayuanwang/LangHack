@@ -1,22 +1,18 @@
 <template>
   <div class="trend-dashboard">
-    <section class="agent-entry-card" role="button" tabindex="0" @click="openLearningAgent" @keyup.enter="openLearningAgent">
-      <div class="agent-entry-glow"></div>
-      <AgentMascot :size="82" />
-      <div class="agent-entry-copy">
-        <span class="agent-entry-kicker">你的英语学习伙伴 · 小芽</span>
-        <h2>{{ agentCardTitle }}</h2>
-        <p>{{ agentCardDescription }}</p>
-        <div v-if="agentContext?.goals?.length" class="agent-goal-chips">
+    <XyPageHeader class="dashboard-intro" variant="hero" eyebrow="GROW WITH XIAOYA" :title="agentCardTitle" :description="agentCardDescription">
+      <template #visual><XyMascot :size="88" /></template>
+      <template v-if="agentContext?.goals?.length" #details>
+        <div class="agent-goal-chips">
           <span v-for="goal in agentContext.goals.slice(0, 3)" :key="goal.id || goal.goalType">{{ goal.title }}</span>
         </div>
-      </div>
-      <button type="button" class="agent-entry-action" @click.stop="openLearningAgent">
-        {{ agentContext?.onboardingCompleted ? '继续交流' : '开始认识我' }}
-        <span>→</span>
-      </button>
-    </section>
-
+      </template>
+      <template #actions>
+        <button type="button" class="agent-entry-action" @click="openLearningAgent">
+          {{ agentContext?.onboardingCompleted ? '继续交流' : '开始认识我' }} <span aria-hidden="true">→</span>
+        </button>
+      </template>
+    </XyPageHeader>
     <!-- 现代化统计网格 -->
     <div class="stats-grid">
       <div class="stat-card trend-courses">
@@ -426,7 +422,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import FollowSummary from '@/components/FollowSummary.vue'
-import AgentMascot from '@/components/AgentMascot.vue'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
+import XyMascot from '@/components/ui/XyMascot.vue'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { getLearningAgentContext } from '@/api/learningAgent'
 import {
@@ -808,47 +805,17 @@ onMounted(() => {
 /* 现代化Dashboard样式 */
 .trend-dashboard {
   min-height: calc(100vh - 120px);
-  background: var(--bg-secondary);
+  background: var(--xy-gradient-page);
   padding: 16px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow-x: hidden;
 }
+.dashboard-intro { margin-bottom: 18px; }
 
-.agent-entry-card {
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  min-height: 142px;
-  margin-bottom: 22px;
-  padding: 22px 24px;
-  overflow: hidden;
-  border: 1px solid rgba(78, 178, 137, 0.2);
-  border-radius: 24px;
-  background: linear-gradient(125deg, #f4fff9 0%, #e3f8ef 52%, #d1f0e4 100%);
-  box-shadow: 0 14px 36px rgba(31, 122, 92, 0.12);
-  cursor: pointer;
-  outline: none;
-}
-
-.agent-entry-card:focus-visible { box-shadow: 0 0 0 4px rgba(50, 166, 120, 0.18), 0 14px 36px rgba(31, 122, 92, 0.12); }
-.agent-entry-glow { position: absolute; z-index: -1; right: -70px; top: -90px; width: 270px; height: 270px; border-radius: 50%; background: rgba(255,255,255,.52); }
-.agent-entry-copy { flex: 1; min-width: 0; }
-.agent-entry-kicker { color: #278062; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
-.agent-entry-copy h2 { margin: 6px 0; color: #174c3b; font-size: clamp(19px, 3vw, 26px); line-height: 1.25; }
-.agent-entry-copy p { margin: 0; color: #557369; font-size: 13px; line-height: 1.55; }
-.agent-goal-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.agent-goal-chips span { padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.72); color: #39705d; font-size: 11px; }
-.agent-entry-action { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 9px; border: none; border-radius: 999px; padding: 12px 17px; background: #1f805f; color: white; font-weight: 700; cursor: pointer; box-shadow: 0 9px 20px rgba(27, 112, 82, .2); }
-.agent-entry-action:hover { background: #176b4f; transform: translateY(-1px); }
-
-@media (max-width: 640px) {
-  .agent-entry-card { align-items: flex-start; gap: 12px; padding: 18px; }
-  .agent-entry-card :deep(.agent-mascot) { margin-top: 2px; transform: scale(.82); transform-origin: top left; margin-right: -12px; }
-  .agent-entry-action { position: absolute; right: 16px; bottom: 14px; padding: 9px 13px; font-size: 12px; }
-  .agent-entry-copy { padding-bottom: 37px; }
-}
+.agent-goal-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.agent-goal-chips span { padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.72); color: var(--xy-brand-700); font-size: 11px; }
+.agent-entry-action { min-height: 44px; display: inline-flex; align-items: center; gap: 9px; border: none; border-radius: var(--xy-radius-sm); padding: 0 17px; background: var(--xy-gradient-brand); color: white; font-weight: 700; cursor: pointer; box-shadow: var(--xy-shadow-card); }
+.agent-entry-action:hover { transform: translateY(-1px); }
 
 /* 现代化统计网格 */
 .stats-grid {
@@ -859,13 +826,13 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-radius: 16px;
+  border-radius: var(--xy-radius-md);
   padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: var(--xy-shadow-card);
+  border: 1px solid var(--xy-border);
   position: relative;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -988,9 +955,9 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, rgba(0, 102, 204, 0.05) 0%, rgba(0, 168, 204, 0.05) 100%);
+  background: linear-gradient(135deg, var(--xy-brand-50), #f8fdf9);
   border: 1px solid var(--border-light);
-  border-radius: 16px;
+  border-radius: var(--xy-radius-md);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1510,7 +1477,7 @@ onMounted(() => {
 }
 
 .rec-type.word {
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(23, 110, 81, 0.1);
   color: var(--primary-color);
 }
 

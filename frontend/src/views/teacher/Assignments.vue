@@ -1,14 +1,20 @@
 <template>
   <div class="assignments-page">
+    <XyPageHeader class="assignments-intro" title="学习任务" eyebrow="TEACHING WORKSPACE" description="布置、跟进和调整任务，及时看见每个班级的学习进展。" variant="compact" />
     <el-tabs v-model="activeTab" class="assignments-tabs">
       <el-tab-pane label="布置任务" name="assignments">
         <div class="assignments-management">
     <el-card>
       <template #header>
         <div class="card-header">
-          <el-button size="small" @click="openTemplateManager">Template manager</el-button>
-          <span>任务管理</span>
-          <el-button type="primary" @click="showCreateDialog">布置任务</el-button>
+          <div class="card-heading">
+            <strong>任务管理</strong>
+            <span>筛选班级与状态，查看完成情况</span>
+          </div>
+          <div class="header-actions">
+            <el-button size="small" @click="openTemplateManager">管理模板</el-button>
+            <el-button type="primary" @click="showCreateDialog">布置任务</el-button>
+          </div>
         </div>
       </template>
 
@@ -107,8 +113,8 @@
             </div>
           </div>
           <div class="template-actions">
-            <el-button size="small" @click="saveCurrentAsTemplate">Save current as template</el-button>
-            <el-button size="small" link type="primary" @click="openTemplateManager">Manage my templates</el-button>
+            <el-button size="small" @click="saveCurrentAsTemplate">保存为模板</el-button>
+            <el-button size="small" link type="primary" @click="openTemplateManager">管理我的模板</el-button>
           </div>
           <div class="template-tip">点击模板可自动填充任务类型和学习时长；指定课文只需选班级和文章，其他任务需选择单元</div>
         </el-form-item>
@@ -520,6 +526,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
 import TaskPlans from './TaskPlans.vue'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const activeTab = ref('assignments')
 
@@ -1894,13 +1901,20 @@ onBeforeUnmount(stopProgressRefresh)
 
 <style scoped>
 .assignments-page {
-  padding: 0;
+  display: grid;
+  gap: 16px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 8px;
 }
+.assignments-intro { margin: 0 12px; }
 .assignments-tabs {
   :deep(.el-tabs__header) {
     padding: 0 16px;
     margin-bottom: 0;
-    background: var(--el-bg-color);
+    background: var(--xy-surface);
+    border: 1px solid var(--xy-border);
+    border-radius: var(--xy-radius-md);
     position: sticky;
     top: 0;
     z-index: 10;
@@ -1910,7 +1924,7 @@ onBeforeUnmount(stopProgressRefresh)
   }
 }
 .assignments-management {
-  padding: 20px;
+  padding: 16px 12px;
 }
 
 .table-wrapper {
@@ -1922,11 +1936,16 @@ onBeforeUnmount(stopProgressRefresh)
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
+.card-heading { display: grid; gap: 3px; }
+.card-heading strong { color: var(--xy-ink); font-size: 17px; }
+.card-heading span { color: var(--xy-ink-soft); font-size: 12px; }
 
 .header-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .filter-bar {
@@ -1944,8 +1963,8 @@ onBeforeUnmount(stopProgressRefresh)
   flex: 1;
   min-width: 140px;
   padding: 16px;
-  border: 2px solid #e4e7ed;
-  border-radius: 8px;
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-md);
   cursor: pointer;
   transition: all 0.25s;
   text-align: center;
@@ -1953,15 +1972,21 @@ onBeforeUnmount(stopProgressRefresh)
 }
 
 .template-card:hover {
-  border-color: #409eff;
-  background: #f5f9ff;
+  border-color: var(--xy-brand-400);
+  background: var(--xy-brand-50);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(23, 110, 81, 0.12);
 }
 
 .template-card.active {
-  border-color: #409eff;
-  background: #ecf5ff;
+  border-color: var(--xy-brand-500);
+  background: var(--xy-brand-50);
+}
+
+@media (max-width: 640px) {
+  .assignments-page { padding: 0; gap: 12px; }
+  .assignments-intro { margin: 0; }
+  .card-header { align-items: flex-start; flex-direction: column; }
 }
 
 .template-actions {
@@ -2231,13 +2256,13 @@ onBeforeUnmount(stopProgressRefresh)
 }
 
 .content-item:hover {
-  border-color: #409eff;
-  background-color: #f5f9ff;
+  border-color: var(--xy-brand-600);
+  background-color: var(--xy-brand-50);
 }
 
 .content-item.is-checked {
-  border-color: #409eff;
-  background-color: #f5f9ff;
+  border-color: var(--xy-brand-600);
+  background-color: var(--xy-brand-50);
 }
 
 .content-info {
@@ -2317,13 +2342,13 @@ onBeforeUnmount(stopProgressRefresh)
 
 .content-category {
   font-size: 12px;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .selected-count {
   margin-top: 8px;
   font-size: 13px;
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-weight: 500;
 }
 
@@ -2339,8 +2364,8 @@ onBeforeUnmount(stopProgressRefresh)
 
 /* 美化复选框样式 */
 .content-item .el-checkbox__input.is-checked .el-checkbox__inner {
-  background-color: #409eff;
-  border-color: #409eff;
+  background-color: var(--xy-brand-600);
+  border-color: var(--xy-brand-600);
 }
 
 /* 滚动条样式 */

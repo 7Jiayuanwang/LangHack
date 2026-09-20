@@ -342,7 +342,7 @@ onBeforeUnmount(() => {
 }
 
 .option-item:hover {
-  border-color: #409EFF;
+  border-color: var(--xy-brand-600);
 }
 
 .option-item.correct {
@@ -364,7 +364,7 @@ onBeforeUnmount(() => {
 
 .option-label {
   font-weight: bold;
-  color: #409EFF;
+  color: var(--xy-brand-600);
   min-width: 30px;
 }
 
@@ -408,13 +408,13 @@ onBeforeUnmount(() => {
   margin-top: 15px;
   padding: 15px;
   background: #fff;
-  border-left: 4px solid #409EFF;
+  border-left: 4px solid var(--xy-brand-600);
   border-radius: 4px;
 }
 
 .explanation h5 {
   margin: 0 0 10px 0;
-  color: #409EFF;
+  color: var(--xy-brand-600);
 }
 
 .answer-actions {

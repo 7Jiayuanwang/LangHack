@@ -23,6 +23,7 @@
     "build:mobile": "npm run build:mobile:vite",
     "deploy:mobile": "npm run build:mobile:vite && npx cap sync && npx cap open android",
     "test": "vitest run",
+    "theme:audit": "node scripts/audit-xiaoya-theme.mjs",
     "import:papers": "node scripts/import-past-papers.mjs"
   },
   "dependencies": {

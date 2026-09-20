@@ -1,5 +1,6 @@
 <template>
   <div class="dashboard-container">
+    <XyPageHeader class="admin-intro" title="平台概览" eyebrow="PLATFORM OVERVIEW" description="关注用户、课程与学习活动的整体运行情况。" variant="compact" />
     <div class="stats-grid">
       <div class="modern-stat-card users">
         <div class="card-bg-icon"><el-icon><User /></el-icon></div>
@@ -370,6 +371,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { User, Reading, School, Document, Loading, ChatLineSquare } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -733,36 +735,37 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.dashboard-container { max-width: 1440px; margin: 0 auto; padding: 32px; }
+.dashboard-container { max-width: 1440px; margin: 0 auto; padding: 24px; }
+.admin-intro { margin-bottom: 20px; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
 
 .modern-stat-card {
-  height: 160px; background: white; border-radius: 24px; padding: 24px;
+  height: 160px; background: var(--xy-surface); border: 1px solid var(--xy-border); border-radius: var(--xy-radius-lg); padding: 24px;
   position: relative; overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+  box-shadow: var(--xy-shadow-card);
   transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
   display: flex; flex-direction: column; justify-content: center;
 }
 .modern-stat-card:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
 .card-bg-icon { position: absolute; right: -20px; top: -10px; font-size: 120px; opacity: 0.05; transform: rotate(15deg); transition: all 0.5s; }
 .modern-stat-card:hover .card-bg-icon { transform: rotate(0deg) scale(1.1); opacity: 0.1; }
-.modern-stat-card .label { font-size: 16px; font-weight: 600; color: #64748b; margin-bottom: 8px; }
-.modern-stat-card .value { font-size: 36px; font-weight: 800; color: #1e293b; line-height: 1; }
+.modern-stat-card .label { font-size: 16px; font-weight: 600; color: var(--xy-ink-muted); margin-bottom: 8px; }
+.modern-stat-card .value { font-size: 36px; font-weight: 800; color: var(--xy-ink); line-height: 1; }
 .card-footer { margin-top: 16px; }
 .trend { font-size: 13px; padding: 4px 10px; border-radius: 100px; background: #f1f5f9; color: #64748b; }
 
-.users { border-bottom: 4px solid #6366f1; }
-.courses { border-bottom: 4px solid #ec4899; }
-.classes { border-bottom: 4px solid #06b6d4; }
-.words { border-bottom: 4px solid #10b981; }
+.users { border-bottom: 4px solid var(--xy-brand-700); }
+.courses { border-bottom: 4px solid var(--xy-brand-500); }
+.classes { border-bottom: 4px solid var(--xy-brand-400); }
+.words { border-bottom: 4px solid var(--success-color); }
 
-.glass-card { border-radius: 24px; border: 1px solid #e2e8f0; }
+.glass-card { border-radius: var(--xy-radius-lg); border: 1px solid var(--xy-border); }
 
 .title-with-dot { font-size: 18px; font-weight: 700; position: relative; padding-left: 16px; }
 .title-with-dot::before {
   content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: 6px; height: 6px; border-radius: 50%; background: #6366f1;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--xy-brand-500);
 }
 
 .dist-container { height: 280px; display: flex; align-items: center; }

@@ -159,14 +159,14 @@ onMounted(loadPapers)
 .page-header p { margin: 8px 0 0; color: #64748b; font-size: 14px; }
 .header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .audio-upload { display: inline-flex; margin-right: 12px; }
-.workflow-note { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; padding: 14px 16px; border-left: 4px solid #2563eb; background: #eff6ff; color: #475569; font-size: 13px; line-height: 1.6; }
+.workflow-note { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; padding: 14px 16px; border-left: 4px solid var(--xy-brand-600); background: var(--xy-brand-50); color: #475569; font-size: 13px; line-height: 1.6; }
 .workflow-note strong { color: #1e40af; font-size: 14px; }
 .workflow-note code { padding: 1px 4px; border-radius: 3px; background: #dbeafe; color: #1e3a8a; }
 .category-tabs { display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
 .category-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #64748b; cursor: pointer; font-weight: 600; }
-.category-tabs button.active { border-bottom-color: #2563eb; color: #1d4ed8; }
+.category-tabs button.active { border-bottom-color: var(--xy-brand-600); color: var(--xy-brand-700); }
 .category-tabs span { min-width: 20px; padding: 1px 5px; border-radius: 10px; background: #e2e8f0; color: #475569; font-size: 11px; text-align: center; }
-.category-tabs button.active span { background: #dbeafe; color: #1d4ed8; }
+.category-tabs button.active span { background: #dbeafe; color: var(--xy-brand-700); }
 @media (max-width: 768px) {
   .admin-papers-page { padding: 18px 16px; }
   .page-header { flex-direction: column; }

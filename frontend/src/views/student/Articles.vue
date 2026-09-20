@@ -34,6 +34,16 @@
 
       <div class="page-content-wrapper" :style="{ transform: `translateY(${pullDistance}px)`, transition: isPulling ? 'none' : 'transform 0.3s ease' }">
 
+      <XyPageHeader
+        class="articles-intro"
+        variant="hero"
+        eyebrow="EXPLORE WITH XIAOYA"
+        title="从好奇开始，用英语发现世界"
+        description="读你感兴趣的内容，让英语成为认识世界的工具。"
+      >
+        <template #visual><XyMascot :size="90" /></template>
+      </XyPageHeader>
+
       <!-- Search Bar -->
       <div class="search-bar">
         <el-input
@@ -192,6 +202,8 @@ import { getAuthHeader } from '@/utils/auth'
 import { getFeaturedVideos } from '@/api/video'
 import { getRecommendedTexts, searchArticles } from '@/api/texts'
 import { recordRecommendationEvent } from '@/api/student'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
+import XyMascot from '@/components/ui/XyMascot.vue'
 
 const router = useRouter()
 const apiBase = import.meta.env.VITE_API_BASE_URL || ''
@@ -881,20 +893,17 @@ onBeforeUnmount(() => {
    Inspired by Stitch Premium Design
    ========================================= */
 
-:root {
-  --app-bg: #f6f7f8;
-  --app-surface: #ffffff;
-  --app-primary: #137fec;
-  --app-text: #0f172a;
-  --app-text-muted: #64748b;
-  --app-border: #e2e8f0;
-}
-
 .articles-mobile-page {
+  --app-bg: var(--xy-canvas);
+  --app-surface: var(--xy-surface);
+  --app-primary: var(--xy-brand-600);
+  --app-text: var(--xy-ink);
+  --app-text-muted: var(--xy-ink-muted);
+  --app-border: var(--xy-border);
   height: 100%;
   overflow: hidden;
   background-color: var(--app-bg);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: inherit;
   color: var(--app-text);
   position: relative;
   display: flex;
@@ -975,6 +984,9 @@ onBeforeUnmount(() => {
   padding-top: max(env(safe-area-inset-top, 12px), 12px);
 }
 
+.articles-intro { margin: 16px 12px 2px; }
+@media (min-width: 768px) { .articles-intro { margin: 20px 0 6px; } }
+
 
 .header-actions {
   display: flex;
@@ -1008,7 +1020,7 @@ onBeforeUnmount(() => {
   transition: background-color 0.2s;
 }
 
-.icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+.icon-btn:hover { background: var(--xy-surface-tint); color: var(--xy-ink); }
 
 .notification-btn {
   position: relative;
@@ -1030,10 +1042,10 @@ onBeforeUnmount(() => {
   position: sticky;
   top: 0;
   z-index: 40;
-  background: rgba(246, 247, 248, 0.95);
+  background: rgba(246, 250, 248, 0.95);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  border-bottom: 1px solid var(--xy-border);
   padding: 6px 0;
 }
 
@@ -1071,9 +1083,9 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   padding: 5px 12px;
   border-radius: 999px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  color: #475569;
+  border: 1px solid var(--xy-border);
+  background: var(--xy-surface);
+  color: var(--xy-ink-muted);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -1089,11 +1101,11 @@ onBeforeUnmount(() => {
 }
 
 .filter-pill.active {
-  background: #1d4ed8;
+  background: var(--xy-brand-600);
   color: white;
-  border-color: #1d4ed8;
+  border-color: var(--xy-brand-600);
   border-radius: 50px;
-  box-shadow: 0 4px 16px rgba(29, 78, 216, 0.45);
+  box-shadow: 0 4px 16px rgba(23, 110, 81, 0.24);
 }
 
 /* --- Feed --- */
@@ -1126,15 +1138,15 @@ onBeforeUnmount(() => {
 
 /* --- Article Card --- */
 .article-card {
-  background: white;
-  border-radius: 12px;
+  background: var(--xy-surface);
+  border-radius: var(--xy-radius-md);
   overflow: hidden;
-  box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05);
+  box-shadow: var(--xy-shadow-card);
   transition: transform 0.2s, box-shadow 0.2s;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  border: 1px solid #f1f5f9;
+  border: 1px solid var(--xy-border);
   width: 100%;
   min-width: 0;
   height: 340px;
@@ -1210,7 +1222,7 @@ onBeforeUnmount(() => {
   font-size: 18px;
   font-weight: 700;
   line-height: 1.3;
-  color: #0f172a;
+  color: var(--xy-ink);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
@@ -1251,8 +1263,8 @@ onBeforeUnmount(() => {
   padding: 0 6px;
   border-radius: 8px;
   font-size: 11px;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--xy-brand-700);
+  background: var(--xy-brand-50);
 }
 
 /* Footer Insights */
@@ -1311,13 +1323,13 @@ onBeforeUnmount(() => {
   margin-bottom: 20px;
 }
 
-.empty-title { margin: 0 0 8px; font-size: 18px; color: #0f172a; }
-.empty-desc { margin: 0 0 24px; font-size: 14px; color: #64748b; }
+.empty-title { margin: 0 0 8px; font-size: 18px; color: var(--xy-ink); }
+.empty-desc { margin: 0 0 24px; font-size: 14px; color: var(--xy-ink-muted); }
 
 .refresh-btn {
   background: white;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
+  border: 1px solid var(--xy-border);
+  color: var(--xy-ink);
   padding: 10px 24px;
   border-radius: 999px;
   font-weight: 600;
@@ -1397,7 +1409,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #64748b;
+  color: var(--xy-ink-muted);
   font-size: 13px;
   font-weight: 500;
 }
@@ -1411,8 +1423,8 @@ onBeforeUnmount(() => {
 .pull-refresh-spinner {
   width: 18px;
   height: 18px;
-  border: 2px solid #e2e8f0;
-  border-top-color: #1d4ed8;
+  border: 2px solid var(--xy-border);
+  border-top-color: var(--xy-brand-600);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
@@ -1436,8 +1448,8 @@ onBeforeUnmount(() => {
 .load-more-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid #e2e8f0;
-  border-top-color: #1d4ed8;
+  border: 2px solid var(--xy-border);
+  border-top-color: var(--xy-brand-600);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
@@ -1450,19 +1462,19 @@ onBeforeUnmount(() => {
 .fab-refresh {
   position: fixed;
   right: 20px;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px)); /* 避开底部导航栏 */
+  bottom: calc(140px + env(safe-area-inset-bottom, 0px)); /* 避开底部导航栏 + 小芽按钮 */
   z-index: 60;
   width: 52px;
   height: 52px;
   border-radius: 50%;
   border: none;
-  background: linear-gradient(135deg, #1d4ed8 0%, #137fec 100%);
+  background: var(--xy-gradient-brand);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(29, 78, 216, 0.35), 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-brand);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -1470,7 +1482,7 @@ onBeforeUnmount(() => {
 
 .fab-refresh:hover:not(:disabled) {
   transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 12px 32px rgba(29, 78, 216, 0.45), 0 4px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 16px 34px rgba(23, 110, 81, 0.25);
 }
 
 .fab-refresh:active:not(:disabled) {

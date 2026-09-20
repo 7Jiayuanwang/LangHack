@@ -1368,7 +1368,7 @@ onMounted(async () => {
   margin-top: 12px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #eff6ff;
+  background: var(--xy-brand-50);
   border: 1px solid #bfdbfe;
   color: #1e3a8a;
 }
@@ -1423,8 +1423,8 @@ onMounted(async () => {
 }
 
 .ds-name {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--xy-brand-50);
+  color: var(--xy-brand-700);
   padding: 1px 6px;
   border-radius: 3px;
   font-family: ui-monospace, monospace;

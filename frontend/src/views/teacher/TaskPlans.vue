@@ -1,5 +1,6 @@
 <template>
   <div class="teacher-task-plans">
+    <XyPageHeader class="plans-intro" title="班级学习计划" eyebrow="CLASS GOALS" description="在统一目标的基础上，为不同班级调整合适的节奏。" variant="compact" />
     <div v-if="loading" class="loading-state">
       <el-skeleton :rows="4" animated />
     </div>
@@ -124,6 +125,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { teacherTaskPlanApi } from '@/api/taskPlan'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const loading = ref(false)
 const plans = ref([])
@@ -240,12 +242,15 @@ onMounted(() => loadPlans())
 </script>
 
 <style scoped lang="scss">
-.teacher-task-plans { padding: 16px; }
+.teacher-task-plans { max-width: 1300px; margin: 0 auto; padding: 16px; }
+.plans-intro { margin-bottom: 18px; }
 .loading-state { padding: 20px; }
 .plan-card {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 16px;
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-md);
+  padding: 20px;
+  background: var(--xy-surface);
+  box-shadow: var(--xy-shadow-card);
   margin-bottom: 16px;
 }
 .plan-header {
@@ -255,11 +260,11 @@ onMounted(() => loadPlans())
   .plan-creator { color: var(--el-text-color-secondary); font-size: 12px; margin-left: auto; }
 }
 .plan-info {
-  background: var(--el-fill-color-lighter); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
+  background: var(--xy-surface-tint); border-radius: var(--xy-radius-sm); padding: 10px 14px; margin-bottom: 12px;
   .info-row { font-size: 13px; color: var(--el-text-color-secondary); line-height: 1.8; }
   .disabled { text-decoration: line-through; opacity: 0.5; }
 }
-.class-section { padding: 12px; margin-bottom: 8px; background: var(--el-fill-color-lighter); border-radius: 8px; }
+.class-section { padding: 12px; margin-bottom: 8px; background: var(--xy-canvas); border: 1px solid var(--xy-border); border-radius: var(--xy-radius-sm); }
 .class-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .class-targets { display: flex; gap: 8px; flex-wrap: wrap; }
 .tag-disabled { text-decoration: line-through; opacity: 0.5; }

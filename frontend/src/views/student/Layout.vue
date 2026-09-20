@@ -12,7 +12,7 @@
     </main>
 
     <!-- 底部导航栏 - 小红书风格 -->
-    <nav class="trend-nav" v-if="!effectiveHideNav">
+    <nav class="trend-nav" v-if="!effectiveHideNav" aria-label="学生主导航">
       <div class="nav-wrapper">
         <router-link
           v-for="(item, index) in navigationItems"
@@ -30,7 +30,7 @@
         </router-link>
         
         <!-- 用户菜单 - 移到底部导航栏最右侧 -->
-        <div class="nav-item" :class="{ 'nav-item--active': showUserMenu }" @click="toggleUserMenu">
+        <div class="nav-item" :class="{ 'nav-item--active': showUserMenu }" role="button" tabindex="0" aria-label="打开我的菜单" :aria-expanded="showUserMenu" @click="toggleUserMenu" @keydown.enter.prevent="toggleUserMenu" @keydown.space.prevent="toggleUserMenu">
           <div class="nav-icon-wrapper">
             <img :src="userAvatar" class="nav-user-avatar" :alt="userStore.userInfo?.realName || '用户'" />
             <div class="nav-icon-ripple"></div>
@@ -443,7 +443,7 @@ onUnmounted(() => {
 
 .nav-item--active .nav-user-avatar {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.2);
+  box-shadow: 0 0 0 2px rgba(23, 110, 81, 0.2);
   transform: scale(1.1);
 }
 
@@ -473,7 +473,8 @@ onUnmounted(() => {
   background: var(--glass-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid var(--glass-border);
+  border-top: 1px solid var(--xy-border);
+  box-shadow: var(--xy-shadow-nav);
   position: fixed;
   bottom: 0;
   left: 0;
@@ -526,7 +527,7 @@ onUnmounted(() => {
 
 .nav-item--active {
   color: var(--primary-color);
-  background: rgba(0, 102, 204, 0.08);
+  background: var(--xy-brand-50);
 }
 
 .nav-icon-wrapper {
@@ -549,7 +550,7 @@ onUnmounted(() => {
 
 .nav-item--active .nav-icon {
   transform: scale(1.2);
-  filter: drop-shadow(0 2px 4px rgba(0, 102, 204, 0.3));
+  filter: drop-shadow(0 2px 4px rgba(23, 110, 81, 0.24));
 }
 
 .nav-icon-ripple {
@@ -572,7 +573,7 @@ onUnmounted(() => {
 }
 
 .nav-label {
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1.2;
   text-align: center;
   font-weight: 600;
@@ -585,7 +586,7 @@ onUnmounted(() => {
 }
 
 .nav-item--active .nav-label {
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .nav-dot {
@@ -596,7 +597,7 @@ onUnmounted(() => {
   height: 6px;
   background: var(--primary-color);
   border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 8px rgba(0, 102, 204, 0.4);
+  box-shadow: 0 0 0 2px var(--bg-primary), 0 0 8px rgba(23, 110, 81, 0.32);
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
@@ -888,11 +889,11 @@ onUnmounted(() => {
   }
 
   .nav-label {
-    font-size: 8px;
+    font-size: 10px;
   }
 
   .nav-item--active .nav-label {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .user-menu-simple {
@@ -964,7 +965,7 @@ onUnmounted(() => {
   }
 
   .nav-label {
-    font-size: 8px;
+    font-size: 9px;
   }
 }
 

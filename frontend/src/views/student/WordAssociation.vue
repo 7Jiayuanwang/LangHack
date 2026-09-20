@@ -445,7 +445,7 @@ const hasAnyData = (r) => {
 .search-title { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; font-size: 24px; font-weight: 700; color: #303133; }
 .search-wrapper { max-width: 600px; margin: 0 auto; }
 .search-input { width: 100%; }
-.search-input :deep(.el-input__wrapper) { border-radius: 24px 0 0 24px; box-shadow: 0 2px 16px rgba(64,158,255,0.15); }
+.search-input :deep(.el-input__wrapper) { border-radius: 24px 0 0 24px; box-shadow: 0 2px 16px rgba(23, 110, 81,0.15); }
 .search-btn { border-radius: 0 24px 24px 0 !important; height: 100% !important; }
 .search-icon { color: #909399; }
 .suggestion-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
@@ -460,13 +460,13 @@ const hasAnyData = (r) => {
 .word-hero { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 2px solid #ebeef5; }
 .word-head-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .word-text { font-size: 36px; font-weight: 800; color: #303133; margin: 0; letter-spacing: -0.5px; }
-.speak-btn { color: #409eff !important; padding: 4px 8px !important; }
+.speak-btn { color: var(--xy-brand-600) !important; padding: 4px 8px !important; }
 .word-phonetic-row { display: flex; gap: 16px; margin-bottom: 10px; }
 .phonetic { font-size: 16px; color: #606266; font-family: 'Courier New', monospace; }
 .word-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .dict-tag { font-size: 11px !important; }
 .dict-section { margin-bottom: 20px; padding: 16px; background: #f5f7fa; border-radius: 12px; }
-.dict-section-title { font-size: 13px; font-weight: 700; color: #409eff; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e4e7ed; }
+.dict-section-title { font-size: 13px; font-weight: 700; color: var(--xy-brand-600); margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e4e7ed; }
 .dict-entries { display: flex; flex-direction: column; gap: 8px; }
 .dict-entry { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.6; }
 .entry-pos { flex-shrink: 0; min-width: 60px; font-size: 12px; font-weight: 600; color: #e6a23c; background: #fdf6ec; padding: 2px 8px; border-radius: 4px; text-align: center; }
@@ -481,13 +481,13 @@ const hasAnyData = (r) => {
 .title-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; }
 .ety-icon { background: linear-gradient(135deg, #67c23a, #85ce61); }
 .mne-icon { background: linear-gradient(135deg, #e6a23c, #ebb563); }
-.syn-icon { background: linear-gradient(135deg, #409eff, #66b1ff); }
+.syn-icon { background: linear-gradient(135deg, var(--xy-brand-600), #66b1ff); }
 .der-icon { background: linear-gradient(135deg, #909399, #a6a9ad); }
 .col-icon { background: linear-gradient(135deg, #f56c6c, #f78989); }
 .wf-icon { background: linear-gradient(135deg, #909399, #a6a9ad); }
 .pw-icon { background: linear-gradient(135deg, #67c23a, #85ce61); }
 .sw-icon { background: linear-gradient(135deg, #e6a23c, #ebb563); }
-.rw-icon { background: linear-gradient(135deg, #409eff, #66b1ff); }
+.rw-icon { background: linear-gradient(135deg, var(--xy-brand-600), #66b1ff); }
 .arrow-icon { color: #c0c4cc; transition: transform 0.3s; }
 .arrow-icon.expanded { transform: rotate(180deg); }
 .section-body { padding: 16px 18px; border-top: 1px solid #ebeef5; }
@@ -496,16 +496,16 @@ const hasAnyData = (r) => {
 .ety-group-title { font-size: 13px; font-weight: 600; color: #606266; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; }
 .pre-dot { background: #67c23a; }
-.root-dot { background: #409eff; }
+.root-dot { background: var(--xy-brand-600); }
 .suf-dot { background: #e6a23c; }
 .ety-chips { display: flex; flex-wrap: wrap; gap: 10px; }
 .ety-chip { padding: 10px 14px; border-radius: 10px; min-width: 180px; flex: 1; max-width: 280px; }
 .pre-chip { background: #f0f9eb; border-left: 3px solid #67c23a; }
-.root-chip { background: #ecf5ff; border-left: 3px solid #409eff; }
+.root-chip { background: var(--xy-brand-50); border-left: 3px solid var(--xy-brand-600); }
 .suf-chip { background: #fdf6ec; border-left: 3px solid #e6a23c; }
 .chip-affix { font-size: 18px; font-weight: 700; font-family: 'Courier New', monospace; margin-right: 8px; }
 .pre-chip .chip-affix { color: #67c23a; }
-.root-chip .chip-affix { color: #409eff; }
+.root-chip .chip-affix { color: var(--xy-brand-600); }
 .suf-chip .chip-affix { color: #e6a23c; }
 .chip-meaning { font-size: 14px; color: #303133; font-weight: 500; }
 .chip-examples { font-size: 12px; color: #909399; margin-top: 6px; }
@@ -518,8 +518,8 @@ const hasAnyData = (r) => {
 .wf-label { font-size: 12px; color: #909399; margin-bottom: 4px; }
 .wf-value { font-size: 16px; font-weight: 600; color: #303133; }
 .syn-chips, .der-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.syn-chip, .der-chip { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: #ecf5ff; border-radius: 20px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
-.syn-chip:hover, .der-chip:hover { background: #d9ecff; border-color: #409eff; transform: translateY(-1px); }
+.syn-chip, .der-chip { display: flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--xy-brand-50); border-radius: 20px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+.syn-chip:hover, .der-chip:hover { background: #d9ecff; border-color: var(--xy-brand-600); transform: translateY(-1px); }
 .der-chip { background: #f4f4f5; }
 .der-chip:hover { background: #e9e9eb; border-color: #909399; }
 .chip-word { font-size: 14px; font-weight: 600; color: #303133; }
@@ -532,7 +532,7 @@ const hasAnyData = (r) => {
 .col-example { font-size: 12px; color: #909399; display: flex; align-items: center; gap: 4px; }
 .related-words-list { display: flex; flex-direction: column; gap: 6px; }
 .related-word-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f5f7fa; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
-.related-word-row:hover { background: #ecf5ff; }
+.related-word-row:hover { background: var(--xy-brand-50); }
 .rw-word { font-size: 14px; font-weight: 600; color: #303133; min-width: 120px; }
 .rw-pos { font-size: 11px; color: #e6a23c; font-style: italic; min-width: 40px; }
 .rw-trans { font-size: 13px; color: #606266; flex: 1; }
