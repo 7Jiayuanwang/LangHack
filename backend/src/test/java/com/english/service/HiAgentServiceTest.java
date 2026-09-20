@@ -371,6 +371,42 @@ class HiAgentServiceTest {
                 any(ResponseExtractor.class));
     }
 
+    @Test
+    void chatQueryStreaming_doesNotForwardThinkingEvents() throws Exception {
+        when(config.getQaApiKey()).thenReturn("qa-key");
+        when(config.getQaAppId()).thenReturn("qa-app");
+        when(config.getApiUrl()).thenReturn("https://test.api.com/v1");
+        when(config.getUserId()).thenReturn("test-user");
+
+        ClientHttpRequest upstreamRequest = mock(ClientHttpRequest.class);
+        when(upstreamRequest.getHeaders()).thenReturn(new org.springframework.http.HttpHeaders());
+        when(upstreamRequest.getBody()).thenReturn(new ByteArrayOutputStream());
+        ClientHttpResponse upstreamResponse = mock(ClientHttpResponse.class);
+        when(upstreamResponse.getStatusCode()).thenReturn(HttpStatus.OK);
+        when(upstreamResponse.getBody()).thenReturn(new ByteArrayInputStream(
+                ("event: thought\ndata: {\"content\":\"internal plan\"}\n\n"
+                        + "event: message\ndata: {\"answer\":\"final answer\"}\n\n"
+                        + "event: done\ndata: {}\n\n").getBytes(StandardCharsets.UTF_8)));
+
+        when(restTemplate.execute(any(URI.class), eq(HttpMethod.POST),
+                any(RequestCallback.class), any(ResponseExtractor.class)))
+                .thenAnswer(invocation -> {
+                    RequestCallback callback = invocation.getArgument(2);
+                    ResponseExtractor<?> extractor = invocation.getArgument(3);
+                    callback.doWithRequest(upstreamRequest);
+                    return extractor.extractData(upstreamResponse);
+                });
+
+        ResponseEntity<StreamingResponseBody> response = hiAgentService
+                .chatQueryStreamingWithQACredentials("conv", "prompt", null, ignored -> { });
+        ByteArrayOutputStream browserResponse = new ByteArrayOutputStream();
+        response.getBody().writeTo(browserResponse);
+        String output = browserResponse.toString(StandardCharsets.UTF_8);
+
+        assertFalse(output.contains("internal plan"));
+        assertTrue(output.contains("final answer"));
+    }
+
     // ==================== Destroy ====================
 
     @Test

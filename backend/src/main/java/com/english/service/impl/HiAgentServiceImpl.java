@@ -687,8 +687,28 @@ public class HiAgentServiceImpl implements HiAgentService {
         }
 
         String upstreamEvent = sseEventName;
-        if ((upstreamEvent == null || upstreamEvent.isBlank()) && payload != null) {
-            upstreamEvent = payload.path("event").asText("");
+        String payloadEvent = payload == null ? "" : payload.path("event").asText("");
+        if ((upstreamEvent == null || upstreamEvent.isBlank()
+                || "message".equalsIgnoreCase(upstreamEvent)) && !payloadEvent.isBlank()) {
+            upstreamEvent = payloadEvent;
+        }
+        if (payload != null && payload.path("data").isObject()) {
+            String nestedEvent = payload.path("data").path("event").asText("");
+            if ((upstreamEvent == null || upstreamEvent.isBlank()
+                    || "message".equalsIgnoreCase(upstreamEvent)) && !nestedEvent.isBlank()) {
+                upstreamEvent = nestedEvent;
+            }
+        }
+
+        // Internal reasoning is useful for debugging, but must never be rendered as the learner answer.
+        if (isThinkingEvent(upstreamEvent)) {
+            return null;
+        }
+
+        // Some gateways use a generic message event but put reasoning in a
+        // dedicated field. Only an explicit answer is safe to render then.
+        if (payload != null && hasThinkingOnlyPayload(payload)) {
+            return null;
         }
 
         if ("message_end".equals(upstreamEvent) || "done".equals(upstreamEvent)) {
@@ -714,6 +734,33 @@ public class HiAgentServiceImpl implements HiAgentService {
             writePlatformSseEvent(outputStream, "delta", delta);
         }
         return null;
+    }
+
+    private boolean isThinkingEvent(String eventName) {
+        if (eventName == null || eventName.isBlank()) {
+            return false;
+        }
+        String normalized = eventName.trim().toLowerCase(java.util.Locale.ROOT)
+                .replace('-', '_').replace(' ', '_');
+        return "thought".equals(normalized)
+                || "thinking".equals(normalized)
+                || "reasoning".equals(normalized)
+                || "deep_thinking".equals(normalized)
+                || "deepthinking".equals(normalized)
+                || "analysis".equals(normalized);
+    }
+
+    private boolean hasThinkingOnlyPayload(JsonNode payload) {
+        JsonNode candidate = payload;
+        if (payload.path("data").isObject()) {
+            candidate = payload.path("data");
+        }
+        boolean hasThinking = candidate.has("thought")
+                || candidate.has("thinking")
+                || candidate.has("reasoning")
+                || candidate.has("analysis");
+        boolean hasAnswer = candidate.has("answer") || candidate.has("Answer");
+        return hasThinking && !hasAnswer;
     }
 
     private String extractFirstText(JsonNode payload, String... fieldNames) {

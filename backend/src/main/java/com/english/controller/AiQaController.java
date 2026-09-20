@@ -30,6 +30,13 @@ import java.util.Optional;
 @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN')")
 public class AiQaController {
 
+    private static final String FINAL_ANSWER_RULES =
+            "\n\nOUTPUT RULES:\n"
+                    + "Return only the final learner-facing answer. Do not reveal chain-of-thought, "
+                    + "internal reasoning, workflow steps, hidden plans, user-profile inference, or drafts. "
+                    + "Do not repeat the user's request or describe what you are going to do. "
+                    + "Answer the current question directly and ask at most one follow-up question.\n";
+
     @Autowired
     private HiAgentService hiAgentService;
 
@@ -202,6 +209,12 @@ public class AiQaController {
     }
 
     private String buildChatPrompt(String userQuestion, String selectedText, String articleContext,
+                                   String scene, String learningContext) {
+        return buildChatPromptBase(userQuestion, selectedText, articleContext, scene, learningContext)
+                + FINAL_ANSWER_RULES;
+    }
+
+    private String buildChatPromptBase(String userQuestion, String selectedText, String articleContext,
                                    String scene, String learningContext) {
         if (isLearningAgentScene(scene)) {
             return "你是一位长期陪伴大学生的英语学习伙伴。请围绕英语学习回答当前问题，"
