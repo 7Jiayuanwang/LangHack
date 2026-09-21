@@ -10,6 +10,7 @@ import com.english.service.LearningAgentPromptContextService;
 import com.english.service.UserService;
 import com.english.service.impl.AiCallMetricsService;
 import com.english.service.impl.AiProviderRuntimeService;
+import com.english.util.AiAnswerSanitizer;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +36,11 @@ public class AiQaController {
                     + "Return only the final learner-facing answer. Do not reveal chain-of-thought, "
                     + "internal reasoning, workflow steps, hidden plans, user-profile inference, or drafts. "
                     + "Do not repeat the user's request or describe what you are going to do. "
+                    + "Never start with phrases such as 'The user currently needs...', 'I need to...', "
+                    + "'First I should analyze...', 'Next I will...', or 'right?'. "
+                    + "Do not write a simulated internal dialogue or a plan addressed to yourself. "
+                    + "Start with the answer itself, then give a concise explanation and an example when useful. "
+                    + "For the learning companion, use at most: direct answer, explanation, example, and one practice question. "
                     + "Answer the current question directly and ask at most one follow-up question.\n";
 
     @Autowired
@@ -104,6 +110,7 @@ public class AiQaController {
                 // 仅在 HiAgent 回退路径记录，Provider 路径由其内部记录，避免重复计数
                 aiCallMetricsService.recordSuccess("QA", "chatQA", startTime, username);
             }
+            answer = AiAnswerSanitizer.sanitize(answer);
 
             // 持久化对话（仅当用户已登录且 auth 不为 null）
             Long conversationId = request.getConversationId();

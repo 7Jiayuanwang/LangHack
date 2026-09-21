@@ -5,6 +5,7 @@ import com.english.exception.BusinessException;
 import com.english.service.AiProviderService;
 import com.english.service.HiAgentService;
 import com.english.service.SystemConfigService;
+import com.english.util.AiAnswerSanitizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -47,6 +48,9 @@ import org.springframework.http.converter.StringHttpMessageConverter;
 @Slf4j
 @Service
 public class HiAgentServiceImpl implements HiAgentService {
+
+    /** Small preface buffer for removing merged planning text before streaming continues. */
+    private static final int STREAM_PREFACE_BUFFER_CHARS = 280;
 
     /** DB system_config group — HiAgent 凭证覆盖来源 */
     private static final String AI_CONFIG_GROUP = "ai_config";
@@ -567,6 +571,7 @@ public class HiAgentServiceImpl implements HiAgentService {
 
         org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody streamBody = outputStream -> {
             StringBuilder completeAnswer = new StringBuilder();
+            StringBuilder emittedAnswer = new StringBuilder();
             log.debug("Sending HiAgent Q&A streaming query for conversation {}", conversationId);
             Boolean completed = restTemplate.execute(
                     uri,
@@ -583,19 +588,30 @@ public class HiAgentServiceImpl implements HiAgentService {
                             return false;
                         }
 
-                        return forwardNormalizedSse(response.getBody(), outputStream, completeAnswer);
+                        return forwardNormalizedSse(response.getBody(), outputStream,
+                                completeAnswer, emittedAnswer);
                     });
 
             if (Boolean.TRUE.equals(completed)) {
                 try {
-                    if (completeAnswer.length() == 0) {
+                    String learnerAnswer = AiAnswerSanitizer.sanitize(completeAnswer.toString());
+                    if (learnerAnswer == null || learnerAnswer.isBlank()) {
                         Map<String, Object> error = new HashMap<>();
                         error.put("message", "AI 问答服务未返回有效内容");
                         writePlatformSseEvent(outputStream, "error", error);
                         return;
                     }
+                    // Flush the final suffix in case the answer was shorter than the
+                    // preface buffer or the last upstream chunk arrived at completion.
+                    if (learnerAnswer.length() > emittedAnswer.length()) {
+                        Map<String, Object> delta = new HashMap<>();
+                        delta.put("content", learnerAnswer.substring(emittedAnswer.length()));
+                        writePlatformSseEvent(outputStream, "delta", delta);
+                        emittedAnswer.setLength(0);
+                        emittedAnswer.append(learnerAnswer);
+                    }
                     if (completionHandler != null) {
-                        completionHandler.accept(completeAnswer.toString());
+                        completionHandler.accept(learnerAnswer);
                     }
                     Map<String, Object> done = new HashMap<>();
                     if (platformConversationId != null) {
@@ -623,7 +639,8 @@ public class HiAgentServiceImpl implements HiAgentService {
     private boolean forwardNormalizedSse(
             InputStream inputStream,
             OutputStream outputStream,
-            StringBuilder completeAnswer) throws IOException {
+            StringBuilder completeAnswer,
+            StringBuilder emittedAnswer) throws IOException {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String eventName = null;
@@ -635,7 +652,7 @@ public class HiAgentServiceImpl implements HiAgentService {
                 if (line.isEmpty()) {
                     if (data.length() > 0 && terminalResult == null) {
                         terminalResult = emitNormalizedEvent(
-                                eventName, data.toString(), outputStream, completeAnswer);
+                                eventName, data.toString(), outputStream, completeAnswer, emittedAnswer);
                     }
                     eventName = null;
                     data.setLength(0);
@@ -663,7 +680,7 @@ public class HiAgentServiceImpl implements HiAgentService {
 
             if (data.length() > 0 && terminalResult == null) {
                 terminalResult = emitNormalizedEvent(
-                        eventName, data.toString(), outputStream, completeAnswer);
+                        eventName, data.toString(), outputStream, completeAnswer, emittedAnswer);
             }
             return terminalResult == null || terminalResult;
         }
@@ -673,7 +690,8 @@ public class HiAgentServiceImpl implements HiAgentService {
             String sseEventName,
             String data,
             OutputStream outputStream,
-            StringBuilder completeAnswer)
+            StringBuilder completeAnswer,
+            StringBuilder emittedAnswer)
             throws IOException {
         if ("[DONE]".equals(data)) {
             return Boolean.TRUE;
@@ -729,11 +747,27 @@ public class HiAgentServiceImpl implements HiAgentService {
         }
         if (content != null && !content.isEmpty()) {
             completeAnswer.append(content);
-            Map<String, Object> delta = new HashMap<>();
-            delta.put("content", content);
-            writePlatformSseEvent(outputStream, "delta", delta);
+            emitAvailableStreamingAnswer(outputStream, completeAnswer, emittedAnswer);
         }
         return null;
+    }
+
+    private void emitAvailableStreamingAnswer(
+            OutputStream outputStream,
+            StringBuilder completeAnswer,
+            StringBuilder emittedAnswer) throws IOException {
+        if (completeAnswer.length() < STREAM_PREFACE_BUFFER_CHARS) {
+            return;
+        }
+        String sanitized = AiAnswerSanitizer.sanitize(completeAnswer.toString());
+        if (sanitized.length() <= emittedAnswer.length()) {
+            return;
+        }
+        Map<String, Object> delta = new HashMap<>();
+        delta.put("content", sanitized.substring(emittedAnswer.length()));
+        writePlatformSseEvent(outputStream, "delta", delta);
+        emittedAnswer.setLength(0);
+        emittedAnswer.append(sanitized);
     }
 
     private boolean isThinkingEvent(String eventName) {

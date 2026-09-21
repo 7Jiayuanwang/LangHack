@@ -286,7 +286,7 @@ const loadConversation = async (conv) => {
       messages.value = (res.data?.messages || []).map(m => ({
         role: m.role,
         content: m.role === 'assistant'
-          ? DOMPurify.sanitize(marked(m.content))
+          ? DOMPurify.sanitize(marked(sanitizeLearnerText(m.content)))
           : m.content
       }))
       sidebarOpen.value = false
@@ -346,6 +346,47 @@ const formatTime = (t) => {
 
 const fillQuestion = (q) => { inputMessage.value = q.label }
 
+// Keep old persisted answers readable after server-side answer sanitization.
+const sanitizeLearnerText = (value) => {
+  if (!value || typeof value !== 'string') return value
+  let cleaned = value
+    .replace(/<(think|thinking|analysis|reasoning)>[\s\S]*?<\/\1>/gi, '')
+    .replace(/\[(think|thinking|analysis|reasoning)\][\s\S]*?\[\/\1\]/gi, '')
+    .trim()
+  const paragraphs = cleaned.split(/\n\s*\n/)
+  const meta = /^(用户|这位用户|学生)(现在|当前|想要|需要|希望|正在|是在)/i
+  const planning = /^(首先|然后|接下来|我需要|让我先|好的[,， ]*我|先要|需要先)/i
+  const planningTerms = /(用户|学生|分析|计划|步骤|结合.{0,12}情况|对吧|下一步|提问)/i
+  while (paragraphs.length > 1 && (meta.test(paragraphs[0].trim())
+    || (planning.test(paragraphs[0].trim()) && planningTerms.test(paragraphs[0])))) {
+    paragraphs.shift()
+  }
+  cleaned = paragraphs.join('\n\n').trim()
+  cleaned = cleaned.replace(/^(用户|这位用户|学生)(现在|当前|想要|需要|希望|正在).*?[。！？!?]+\s*/is, '')
+  const seen = new Set()
+  cleaned = cleaned.split(/\n\s*\n/).map((paragraph) => {
+    let current = paragraph.trim()
+    const reviewIndex = current.search(/(?:不对[,，]|等等[,，]|不过用户|用户要详细|专业对吧|这样就可以|等下有没有|符合限制|都是中文|必要的英文标注)/i)
+    if (reviewIndex >= 0) current = current.slice(0, reviewIndex).trim()
+    if (!current) return ''
+    const fingerprint = current.replace(/\s+/g, ' ').trim()
+    if (fingerprint.length > 3 && seen.has(fingerprint)) return ''
+    if (fingerprint.length > 3) seen.add(fingerprint)
+    return current
+  }).filter(Boolean).join('\n\n').trim()
+  const sentences = cleaned.split(/(?<=[。！？!?])\s*/)
+  const review = /这样就可以|检查(?:一下|下)|符合(?:要求|.*需求)|首先直接回答|只有一个追问|有没有涉及其他无关|都是英语学习|下一步|对吧/i
+  let cut = 0
+  let removed = false
+  for (const sentence of sentences) {
+    if (!review.test(sentence)) break
+    cut += sentence.length
+    removed = true
+  }
+  if (removed && cut < cleaned.length) cleaned = cleaned.slice(cut).trim()
+  return cleaned || value.trim()
+}
+
 // ============================================================
 // 核心修改：sendMessage 支持 SSE 流式输出
 // ============================================================
@@ -380,7 +421,9 @@ const sendMessage = async () => {
         selectedText: selectedText.value,
         articleContext: props.embedded ? articleTitle.value : route.query.context || '',
         conversationId: currentConversationId.value,
-        scene: isCompanion.value ? 'LEARNING_AGENT' : 'QA'
+        // Article Q&A and the standalone learning companion have different
+        // prompts. An article title changes the visual identity, not the scene.
+        scene: props.agentMode ? 'LEARNING_AGENT' : 'QA'
       })
     })
 
@@ -402,6 +445,9 @@ const sendMessage = async () => {
             : data?.content || data?.answer || data?.Answer || ''
           if (content) {
             rawText += content
+            // The backend SSE bridge already buffers and removes the model's
+            // planning preface. Do not re-sanitize an incomplete stream here:
+            // changing the decision on every chunk makes earlier HTML vanish.
             messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText))
             scrollToBottom()
           }
@@ -428,6 +474,11 @@ const sendMessage = async () => {
         await loadConversations()
       }
 
+      // Apply the compatibility sanitizer once, after the complete stream is known.
+      if (rawText) {
+        messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText))
+      }
+
       if (!rawText) {
         messages.value[aiMsgIndex].content = '抱歉，未收到有效响应。'
       }
@@ -442,7 +493,7 @@ const sendMessage = async () => {
         return
       }
       if (jsonData?.code === 200 && jsonData?.data?.response) {
-        messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(jsonData.data.response))
+        messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(sanitizeLearnerText(jsonData.data.response)))
         if (jsonData.data.conversationId && !currentConversationId.value) {
           currentConversationId.value = jsonData.data.conversationId
           await loadConversations()
@@ -456,7 +507,10 @@ const sendMessage = async () => {
       if (rawText) {
         messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(rawText + '\n\n---\n*（连接中断）*'))
       } else {
-        messages.value[aiMsgIndex].content = '抱歉，AI服务暂时不可用。请稍后再试。'
+        const detail = typeof error?.message === 'string' && error.message.trim()
+          ? error.message.trim()
+          : 'AI服务暂时不可用，请稍后再试。'
+        messages.value[aiMsgIndex].content = DOMPurify.sanitize(marked(`抱歉，${detail}`))
       }
     }
   } finally {
