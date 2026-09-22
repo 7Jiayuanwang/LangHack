@@ -100,6 +100,34 @@ class ArticleInsightServiceTest {
     }
 
     @Test
+    void listeningUsesTheSamePointCacheWithoutFalselyCompletingReadingOrSendingUnreadMessage() {
+        Text text = new Text();
+        text.setId(8L);
+        text.setContentType("TEXT");
+        text.setCet4Content("Practice makes progress.");
+        when(texts.selectById(8L)).thenReturn(text);
+        when(levels.resolve(7L)).thenReturn(new ArticleInsightLevelService.Decision("CET4", "当前水平"));
+        KnowledgePoint point = new KnowledgePoint();
+        point.setType("VOCABULARY");
+        point.setExpression("progress");
+        when(generator.generate(any(), any())).thenReturn(List.of(point));
+        AtomicReference<ArticleLearningInsight> cached = new AtomicReference<>();
+        when(insights.selectOne(any())).thenAnswer(invocation -> cached.get());
+        doAnswer(invocation -> {
+            cached.set(invocation.getArgument(0));
+            return 1;
+        }).when(insights).insert(any());
+
+        assertEquals("PENDING", service.getForListening(7L, 8L, "cet4").getStatus());
+        ArticleLearningInsightDto ready = service.getForListening(7L, 8L, "cet4");
+        assertEquals("READY", ready.getStatus());
+        assertEquals("progress", ready.getPoints().get(0).getExpression());
+        verify(readings, never()).selectOne(any());
+        verify(messages, never()).insert(any());
+        verify(generator, times(1)).generate(any(), any());
+    }
+
+    @Test
     void cannotMarkAnotherStudentsMessageRead() {
         ArticleInsightMessage message = new ArticleInsightMessage();
         message.setId(5L);

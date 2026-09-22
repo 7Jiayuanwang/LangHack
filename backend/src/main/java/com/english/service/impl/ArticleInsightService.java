@@ -78,14 +78,22 @@ public class ArticleInsightService {
             User user = userService.getUserById(userId);
             if (user == null || !("STUDENT".equals(user.getRole()) || "USER".equals(user.getRole()))) return;
             Prepared prepared = prepare(userId, textId);
-            if (prepared != null) ensureGenerated(userId, prepared);
+            if (prepared != null) ensureGenerated(userId, prepared, true);
         } catch (Exception e) {
             log.warn("小芽知识点任务未启动: userId={}, textId={}, reason={}", userId, textId, e.getMessage());
         }
     }
 
     public ArticleLearningInsightDto getForCompletedArticle(Long userId, Long textId) {
-        Prepared prepared = prepare(userId, textId);
+        return resolve(userId, prepare(userId, textId), true);
+    }
+
+    /** Listening to an article can reveal its points without falsely marking reading as complete. */
+    public ArticleLearningInsightDto getForListening(Long userId, Long textId, String version) {
+        return resolve(userId, prepareForVersion(userId, textId, version), false);
+    }
+
+    private ArticleLearningInsightDto resolve(Long userId, Prepared prepared, boolean deliverMessage) {
         ArticleLearningInsightDto result = new ArticleLearningInsightDto();
         if (prepared == null) {
             result.setStatus("UNAVAILABLE");
@@ -96,7 +104,7 @@ public class ArticleInsightService {
         result.setLevelReason(prepared.levelReason());
         ArticleLearningInsight cached = findCached(prepared);
         if (cached != null) {
-            deliver(userId, prepared.textId(), cached.getId());
+            if (deliverMessage) deliver(userId, prepared.textId(), cached.getId());
             result.setStatus("READY");
             result.setPoints(readPoints(cached));
             return result;
@@ -106,7 +114,7 @@ public class ArticleInsightService {
             result.setStatus("UNAVAILABLE");
             result.setMessage("小芽暂时没能提炼出可靠的知识点，稍后可以重试");
         } else {
-            ensureGenerated(userId, prepared);
+            ensureGenerated(userId, prepared, deliverMessage);
             result.setStatus("PENDING");
             result.setMessage("小芽正在从这篇文章中挑选适合你的知识点…");
         }
@@ -156,10 +164,15 @@ public class ArticleInsightService {
                 .eq("student_id", userId).eq("text_id", textId).eq("is_completed", 1)
                 .orderByDesc("end_time").orderByDesc("id").last("LIMIT 1"));
         if (reading == null) throw new BusinessException("请先完成这篇文章的阅读");
+        return prepareForVersion(userId, textId, reading.getContentVersion());
+    }
+
+    private Prepared prepareForVersion(Long userId, Long textId, String selectedVersion) {
+        if (textId == null || textId <= 0) throw new BusinessException("文章不存在");
         Text text = textMapper.selectById(textId);
         if (text == null) throw new BusinessException("文章不存在");
         ArticleInsightLevelService.Decision decision = levelService.resolve(userId);
-        String version = normalizeVersion(reading.getContentVersion());
+        String version = normalizeVersion(selectedVersion);
         String content = contentFor(text, version);
         if (content == null || content.isBlank()) {
             version = "original";
@@ -204,7 +217,7 @@ public class ArticleInsightService {
                 .last("LIMIT 1"));
     }
 
-    private void ensureGenerated(Long userId, Prepared prepared) {
+    private void ensureGenerated(Long userId, Prepared prepared, boolean deliverMessage) {
         String flightKey = userId + ":" + prepared.cacheKey();
         if (!inFlight.add(flightKey)) return;
         try {
@@ -230,7 +243,7 @@ public class ArticleInsightService {
                             }
                         }
                     }
-                    if (cached != null) deliver(userId, prepared.textId(), cached.getId());
+                    if (cached != null && deliverMessage) deliver(userId, prepared.textId(), cached.getId());
                     retryAfter.remove(flightKey);
                 } catch (Exception e) {
                     retryAfter.put(flightKey, System.currentTimeMillis() + 60_000L);

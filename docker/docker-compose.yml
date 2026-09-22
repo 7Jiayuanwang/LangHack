@@ -271,6 +271,7 @@ services:
       GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
       # TTS 语音合成（硅基流动 CosyVoice2）
       TTS_API_KEY: ${TTS_API_KEY:-${AI_TRANSLATE_API_KEY:-}}
+      ARTICLE_AUDIO_STORAGE_DIR: ${ARTICLE_AUDIO_STORAGE_DIR:-/app/uploads/article-audio}
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
       # 零停机热更新（HotDeployController 启动 deployer sidecar 容器时需要）

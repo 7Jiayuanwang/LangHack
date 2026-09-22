@@ -264,6 +264,11 @@ tts:
   cache-dir: ${TTS_CACHE_DIR:/app/uploads/tts}
   timeout: ${TTS_TIMEOUT:60000}
 
+# 文章朗读使用本地离线引擎，独立于有额度的短文本 TTS。
+# Docker 工作目录是 /app，uploads 已挂载到宿主机。
+article-audio:
+  storage-dir: ${ARTICLE_AUDIO_STORAGE_DIR:./uploads/article-audio}
+
 async:
   version-generator:
     core-pool-size: 8

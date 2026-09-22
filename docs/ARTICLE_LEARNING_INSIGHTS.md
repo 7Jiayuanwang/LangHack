@@ -16,6 +16,8 @@
 
 接口：`GET /api/student/agent/article-insights/{textId}`（必须已完成阅读）、`GET /api/student/agent/article-insights/unread`、`POST /api/student/agent/article-insights/messages/{id}/read`。以上接口仅允许学生/普通用户访问，查询和已读操作均按当前登录用户限定。
 
+听文章流程另通过 `GET/POST /api/student/learning/texts/{textId}/audio/insights?version=...` 复用同一知识点缓存并生成双语音频。它在校验当前用户有权访问文章后可使用，不要求事先完成阅读；听完不会伪造阅读完成记录，预取也不会新增未读消息。详见 `docs/ARTICLE_AUDIO.md`。
+
 ## 后续计划：HiAgent 专用知识点智能体
 
 已获得项目方授权：可将文章正文发送至 HiAgent，用于生成阅读后知识点。下一阶段应在 HiAgent 创建一个**专用的“阅读后知识点”智能体**，与现有转写、出题、对话智能体分开配置；本次仅记录计划，没有创建远端智能体、配置密钥或发送正文。
