@@ -294,7 +294,7 @@ public class AdminController {
      * 获取课程列表（管理员专用）
      */
     @GetMapping("/courses")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<Map<String, Object>> getCourses(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -680,7 +680,7 @@ public class AdminController {
      * 获取课文统计数据
      */
     @GetMapping("/texts/stats")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<Map<String, Object>> getTextStats() {
         try {
             Map<String, Object> stats = new HashMap<>();
@@ -2128,7 +2128,7 @@ public class AdminController {
      * 获取所有内容标签
      */
     @GetMapping("/content-tags")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<List<ContentTag>> getContentTags() {
         try {
             List<ContentTag> tags = contentTagService.lambdaQuery()
