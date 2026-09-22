@@ -32,7 +32,7 @@
           api-path="/api/student/ai-qa/chat/stream"
           :context-text="selectedText"
           :context-title="articleTitle"
-          agent-mode
+          :agent-mode="!isArticlePage"
           embedded
         />
       </div>

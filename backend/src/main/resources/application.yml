@@ -48,6 +48,12 @@ spring:
   application:
     name: english-learning-platform
 
+  # Streaming AI answers may take longer than Spring MVC's 60s default while
+  # the server buffers and sanitizes the upstream response.
+  mvc:
+    async:
+      request-timeout: ${SPRING_MVC_ASYNC_REQUEST_TIMEOUT:300000}
+
   servlet:
     multipart:
       max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:100GB}
