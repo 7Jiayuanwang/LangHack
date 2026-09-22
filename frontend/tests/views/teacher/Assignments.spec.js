@@ -62,6 +62,30 @@ describe('Teacher Assignments.vue', () => {
     expect(wrapper.vm.assignmentForm.title).toBe('')
   })
 
+  it('creates one assignment for each selected class', async () => {
+    const wrapper = createWrapper()
+    wrapper.vm.assignmentForm.title = 'Shared assignment'
+    wrapper.vm.assignmentForm.classId = [11, 22]
+    wrapper.vm.assignmentForm.unitId = 7
+    wrapper.vm.assignmentForm.deadline = new Date(Date.now() + 3600000)
+    wrapper.vm.assignmentFormRef = {
+      validate: async (callback) => callback(true)
+    }
+    global.fetch.mockReset().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ code: 200, data: { records: [] } })
+    })
+
+    await wrapper.vm.saveAssignment()
+
+    const createRequests = global.fetch.mock.calls.filter(([url, options]) =>
+      url === '/api/assignments' && options?.method === 'POST'
+    )
+    expect(createRequests).toHaveLength(2)
+    expect(JSON.parse(createRequests[0][1].body).classId).toBe(11)
+    expect(JSON.parse(createRequests[1][1].body).classId).toBe(22)
+  })
+
   it('has assignmentRules defined', () => {
     const wrapper = createWrapper()
     expect(wrapper.vm.assignmentRules).toBeDefined()

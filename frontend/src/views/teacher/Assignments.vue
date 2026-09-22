@@ -106,7 +106,14 @@
           <el-input v-model="assignmentForm.title" placeholder="请输入任务标题" />
         </el-form-item>
         <el-form-item label="选择班级" prop="classId">
-          <el-select v-model="assignmentForm.classId" placeholder="请选择班级" style="width: 100%">
+          <el-select
+            v-model="assignmentForm.classId"
+            :multiple="!isEdit"
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="请选择班级"
+            style="width: 100%"
+          >
             <el-option
               v-for="cls in classes"
               :key="cls.id"
@@ -416,7 +423,8 @@ const filterForm = reactive({
 const assignmentForm = reactive({
   id: null,
   title: '',
-  classId: null,
+  // 新建时为数组以支持一次给多个班级布置；编辑时保存单个班级 ID。
+  classId: [],
   unitId: null,
   assignmentType: 'UNIT',
   articleType: 'OUTER',
@@ -438,7 +446,15 @@ const assignmentRules = {
     { required: true, message: '请输入任务标题', trigger: 'blur' }
   ],
   classId: [
-    { required: true, message: '请选择班级', trigger: 'change' }
+    {
+      validator: (rule, value, callback) => {
+        const hasClass = Array.isArray(value)
+          ? value.length > 0
+          : value !== null && value !== undefined && value !== ''
+        callback(hasClass ? undefined : new Error('请选择班级'))
+      },
+      trigger: 'change'
+    }
   ],
   unitId: [
     {
@@ -757,7 +773,7 @@ const resetAssignmentForm = () => {
   Object.assign(assignmentForm, {
     id: null,
     title: '',
-    classId: null,
+    classId: [],
     unitId: null,
     assignmentType: 'UNIT',
     articleType: 'OUTER',
@@ -953,7 +969,99 @@ const getTextClassificationLabel = (text) => {
   return ['课内教材', ...details].join(' / ')
 }
 
+const saveAssignmentForSelectedClasses = async () => {
+  if (!assignmentFormRef.value) return
+
+  await assignmentFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    saving.value = true
+    try {
+      const headers = { 'Content-Type': 'application/json' }
+      const authHeader = getAuthHeader()
+      if (authHeader) headers.Authorization = authHeader
+      const selectedClassIds = Array.isArray(assignmentForm.classId)
+        ? assignmentForm.classId
+        : [assignmentForm.classId]
+      const classIds = (isEdit.value ? [assignmentForm.classId] : selectedClassIds)
+        .filter(classId => classId !== null && classId !== undefined && classId !== '')
+      if (classIds.length === 0) {
+        ElMessage.error('请选择班级')
+        return
+      }
+      const isUnitAssignment = assignmentForm.assignmentType === 'UNIT'
+      const results = []
+
+      // The API stores one class per assignment, so create one record per selection.
+      for (const classId of classIds) {
+        const url = isEdit.value && isUnitAssignment
+          ? `/api/assignments/${assignmentForm.id}`
+          : (isUnitAssignment ? '/api/assignments' : '/api/assignments/create-with-content')
+        const method = isEdit.value && isUnitAssignment ? 'PUT' : 'POST'
+        const payload = isUnitAssignment
+          ? {
+              id: isEdit.value ? assignmentForm.id : null,
+              title: assignmentForm.title,
+              classId,
+              unitId: assignmentForm.unitId,
+              description: assignmentForm.description,
+              deadline: assignmentForm.deadline,
+              weight: assignmentForm.weight || 1.0,
+              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60
+            }
+          : {
+              title: assignmentForm.title,
+              classId,
+              unitId: assignmentForm.unitId,
+              assignmentType: assignmentForm.assignmentType,
+              articleType: assignmentForm.articleType,
+              bookVolume: assignmentForm.bookVolume,
+              contentSection: assignmentForm.contentSection,
+              unitNum: assignmentForm.unitNum,
+              textIds: assignmentForm.textIds,
+              wordIds: assignmentForm.wordIds,
+              description: assignmentForm.description,
+              deadline: assignmentForm.deadline,
+              weight: assignmentForm.weight || 1.0,
+              idealStudyTimeMinutes: assignmentForm.idealStudyTimeMinutes || 60
+            }
+        const response = await fetch(url, {
+          method,
+          headers,
+          body: JSON.stringify(payload)
+        })
+        let data = null
+        try {
+          data = await response.json()
+        } catch (error) {
+          console.error('Failed to parse assignment response', error)
+        }
+        results.push({ success: response.ok && data?.code === 200, message: data?.message })
+      }
+
+      const failed = results.filter(result => !result.success)
+      if (failed.length === 0) {
+        ElMessage.success(isEdit.value ? '任务更新成功' : `任务已布置到 ${results.length} 个班级`)
+        dialogVisible.value = false
+        loadAssignments()
+      } else {
+        const succeeded = results.length - failed.length
+        ElMessage.error(succeeded > 0
+          ? `已成功布置 ${succeeded} 个班级，${failed.length} 个班级失败`
+          : (failed[0].message || '操作失败'))
+      }
+    } catch (error) {
+      console.error('Failed to save assignment', error)
+      ElMessage.error('操作失败')
+    } finally {
+      saving.value = false
+    }
+  })
+}
+
 const saveAssignment = async () => {
+  return saveAssignmentForSelectedClasses()
+
+  /*
   if (!assignmentFormRef.value) return
 
   await assignmentFormRef.value.validate(async (valid) => {
@@ -1054,6 +1162,7 @@ const saveAssignment = async () => {
       }
     }
   })
+  */
 }
 
 const viewProgress = async (assignment) => {
@@ -1338,8 +1447,9 @@ const formatTime = (time) => {
 
 // 监听班级选择变化，动态加载对应课程单元
 watch(() => assignmentForm.classId, async (newClassId) => {
-  if (newClassId) {
-    await loadUnitsForClass(newClassId)
+  const classId = Array.isArray(newClassId) ? newClassId[0] : newClassId
+  if (classId) {
+    await loadUnitsForClass(classId)
   } else {
     units.value = []
   }

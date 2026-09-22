@@ -1250,6 +1250,8 @@ public class LearningRecordsServiceImpl implements LearningRecordsService {
             Map<String, Object> recordMap = new HashMap<>();
             recordMap.put("id", record.getId());
             recordMap.put("actionType", record.getRecordType());
+            // 保留原始秒数，供前端精确展示；duration 继续作为旧接口的分钟字段。
+            recordMap.put("durationSeconds", record.getDurationSeconds());
             recordMap.put("duration", record.getDurationSeconds() != null ? (record.getDurationSeconds() + 59) / 60 : 0); // 向上取整转换为分钟
             recordMap.put("createdAt", record.getCreatedTime());
             recordMap.put("correctCount", record.getCorrectCount());

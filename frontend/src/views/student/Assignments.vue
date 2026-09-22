@@ -360,7 +360,7 @@
                   <div class="record-content">
                     <span class="action-type">{{ getActionTypeText(record.actionType) }}</span>
                     <span class="content">{{ record.content }}</span>
-                    <span class="duration">{{ record.duration }}分钟</span>
+                    <span class="duration">{{ formatRecordDuration(record) }}</span>
                   </div>
                 </div>
               </div>
@@ -823,6 +823,15 @@ const studyText = (text) => {
     console.error('跳转课文学习失败:', error)
     ElMessage.error('跳转到课文学习失败')
   }
+}
+
+// 学习记录优先使用后端返回的精确秒数；旧接口仅有分钟字段时按分钟兼容显示。
+const formatRecordDuration = (record) => {
+  const rawSeconds = Number(record?.durationSeconds)
+  const seconds = Number.isFinite(rawSeconds)
+    ? Math.max(0, Math.floor(rawSeconds))
+    : Math.max(0, Math.round((Number(record?.duration) || 0) * 60))
+  return formatStudyDuration(seconds)
 }
 
 const studyWord = async (word) => {

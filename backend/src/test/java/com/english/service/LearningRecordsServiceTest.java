@@ -43,6 +43,9 @@ class LearningRecordsServiceTest {
     private TextMapper textMapper;
 
     @Mock
+    private TextUnitMapper textUnitMapper;
+
+    @Mock
     private UnitMapper unitMapper;
 
     @Mock

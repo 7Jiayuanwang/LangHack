@@ -894,6 +894,23 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         recordWrapper.eq("student_id", studentId)
                 .eq("assignment_id", assignmentId);
 
+        // 课文作业的学习时长必须与学生课文阅读页保持同一统计口径：
+        // 只统计 TEXT_VIEW，不能把单词浏览、练习或提交任务的时长混入课文阅读时间。
+        Assignment assignment = getActiveAssignment(assignmentId);
+        if (assignment != null && "TEXTS".equals(getAssignmentType(assignment))) {
+            recordWrapper.eq("record_type", "TEXT_VIEW");
+            List<com.english.entity.Text> assignmentTexts = getAssignmentTexts(assignment);
+            if (assignmentTexts != null && !assignmentTexts.isEmpty()) {
+                List<Long> textIds = assignmentTexts.stream()
+                        .map(com.english.entity.Text::getId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                if (!textIds.isEmpty()) {
+                    recordWrapper.in("text_id", textIds);
+                }
+            }
+        }
+
         List<LearningRecord> records = learningRecordMapper.selectList(recordWrapper);
 
         // 先求和所有秒数，再除以60转换为分钟（避免逐条除60导致小值截断为0）

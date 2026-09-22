@@ -55,4 +55,10 @@ describe('Student Assignments.vue', () => {
     const wrapper = createWrapper()
     expect(typeof wrapper.vm.isMobile).toBe('boolean')
   })
+
+  it('formats assignment records from exact seconds and supports legacy minutes', () => {
+    const wrapper = createWrapper()
+    expect(wrapper.vm.formatRecordDuration({ durationSeconds: 65, duration: 2 })).toBe('1分5秒')
+    expect(wrapper.vm.formatRecordDuration({ duration: 2 })).toBe('2分0秒')
+  })
 })
