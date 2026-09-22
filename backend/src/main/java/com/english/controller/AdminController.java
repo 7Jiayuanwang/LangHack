@@ -357,7 +357,7 @@ public class AdminController {
      * 根据课程ID获取单元列表
      */
     @GetMapping("/courses/{courseId}/units")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     public Result<List<Unit>> getUnitsByCourseId(@PathVariable Long courseId) {
         try {
             List<Unit> units = unitService.getUnitsByCourseId(courseId);
