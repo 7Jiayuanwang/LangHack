@@ -66,13 +66,51 @@
     <main v-else class="exam-area">
       <div class="progress-line" aria-hidden="true"><span :style="{ width: `${progress}%` }"></span></div>
 
-      <section class="question-card">
+      <div ref="splitRef" class="exam-split" :class="{ 'pane-hidden': !passagePaneVisible }">
+        <aside v-show="passagePaneVisible" class="passage-pane" :style="paneStyle">
+          <div class="passage-pane-head">
+            <span>正文材料</span>
+            <button class="pane-toggle" type="button" title="收起正文" aria-label="收起正文" @click="passagePaneVisible = false">
+              <el-icon><DArrowLeft /></el-icon>
+            </button>
+          </div>
+          <div ref="passageBody" class="passage-body">
+            <template v-if="currentQuestion?.passage">{{ currentQuestion.passage }}</template>
+            <template v-else-if="stemInPane">{{ currentQuestion.stem }}</template>
+            <p v-else-if="isListeningQuestion" class="passage-empty">本题材料为听力录音，请在右侧播放并作答。</p>
+            <p v-else class="passage-empty">本题没有正文材料。</p>
+            <div v-if="questionType === 'matching'" class="option-list">
+              <p v-for="(option, optionIndex) in currentQuestion.options" :key="optionIndex"><strong>{{ optionLetter(optionIndex) }}.</strong> {{ option }}</p>
+            </div>
+          </div>
+        </aside>
+
+        <div
+          v-show="passagePaneVisible"
+          class="split-handle"
+          title="拖动调整宽度 · 双击恢复默认"
+          @pointerdown="startResize"
+          @dblclick="resetPaneWidth"
+        ></div>
+
+        <section ref="questionCardRef" class="question-card">
         <div class="question-meta">
           <span>{{ currentQuestion.section }}</span>
-          <span>第 {{ currentIndex + 1 }} / {{ activePaper.questions.length }} 题</span>
+          <span class="meta-right">
+            第 {{ currentIndex + 1 }} / {{ activePaper.questions.length }} 题
+            <button
+              v-if="!passagePaneVisible && (currentQuestion.passage || stemInPane)"
+              class="pane-restore"
+              type="button"
+              title="展开正文"
+              @click="passagePaneVisible = true"
+            >
+              <el-icon><DArrowRight /></el-icon>
+              正文
+            </button>
+          </span>
         </div>
-        <p v-if="currentQuestion.passage" class="passage">{{ currentQuestion.passage }}</p>
-        <h2>{{ currentQuestion.stem }}</h2>
+        <h2 v-if="!stemInPane">{{ currentQuestion.stem }}</h2>
 
         <div v-if="isListeningQuestion" class="listening-player">
           <div class="listening-label">听力材料</div>
@@ -108,12 +146,12 @@
           </label>
         </div>
 
-        <div v-else-if="questionType === 'matching'" class="structured-answers">
+        <div v-else-if="questionType === 'matching'" class="structured-answers matching-answers">
           <label v-for="item in currentQuestion.items" :key="item.id">
             <span>{{ item.prompt }}</span>
             <select :value="answerValue?.[item.id] ?? ''" :disabled="submitted" @change="setMatchingAnswer(item.id, $event.target.value)">
               <option value="">请选择对应段落</option>
-              <option v-for="(option, optionIndex) in currentQuestion.options" :key="optionIndex" :value="optionIndex">{{ optionLetter(optionIndex) }}. {{ option }}</option>
+              <option v-for="(option, optionIndex) in currentQuestion.options" :key="optionIndex" :value="optionIndex">{{ optionLetter(optionIndex) }}</option>
             </select>
           </label>
         </div>
@@ -141,7 +179,8 @@
           <p v-else>正确答案：{{ optionLetter(currentQuestion.answer) }}</p>
           <p>{{ currentQuestion.analysis }}</p>
         </div>
-      </section>
+        </section>
+      </div>
 
       <footer class="exam-actions">
         <button type="button" class="secondary-button" :disabled="currentIndex === 0" @click="currentIndex--">上一题</button>
@@ -161,10 +200,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, Delete, Upload } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, DArrowLeft, DArrowRight, Delete, Upload } from '@element-plus/icons-vue'
 import { examCategories, pastPapers } from '@/data/pastPapers'
 import PastPaperImportDialog from '@/components/past-papers/PastPaperImportDialog.vue'
 import { deleteSharedPastPaper, getSharedPastPapers, submitPastPaperAttempt } from '@/api/pastPapers'
@@ -182,6 +221,140 @@ const importVisible = ref(false)
 const sharedPapers = ref([])
 const userStore = useUserStore()
 const savedResults = ref(readSavedResults())
+
+// ===== 正文/题目分栏 =====
+// 桌面（>900px）：左右分栏，拖拽调整正文「宽度」
+// 移动（<=900px）：上下堆叠，拖拽调整正文「高度」——手机上同样可以滑动
+const PASSAGE_WIDTH_KEY = 'langhack-past-paper-passage-width-v2'
+const PASSAGE_HEIGHT_KEY = 'langhack-past-paper-passage-height-v1'
+const DEFAULT_PANE_WIDTH = 620
+const DEFAULT_PANE_HEIGHT = 300
+const COMPACT_QUERY = '(max-width: 900px)'
+const passagePaneVisible = ref(true)
+const passageWidth = ref(readPaneWidth())
+const passageHeight = ref(readPaneHeight())
+const splitRef = ref(null)
+const passageBody = ref(null)
+const questionCardRef = ref(null)
+const resizing = ref(false)
+
+const compactMedia = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(COMPACT_QUERY) : null
+const isCompact = ref(compactMedia ? compactMedia.matches : false)
+
+function syncCompactLayout(event) {
+  isCompact.value = event.matches
+}
+
+function readStoredNumber(key, fallback, min) {
+  try {
+    const value = Number(localStorage.getItem(key))
+    return Number.isFinite(value) && value >= min ? value : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function readPaneWidth() {
+  return readStoredNumber(PASSAGE_WIDTH_KEY, DEFAULT_PANE_WIDTH, 260)
+}
+
+function readPaneHeight() {
+  return readStoredNumber(PASSAGE_HEIGHT_KEY, DEFAULT_PANE_HEIGHT, 120)
+}
+
+function persistPaneWidth() {
+  try {
+    localStorage.setItem(PASSAGE_WIDTH_KEY, String(passageWidth.value))
+  } catch {
+    // localStorage 不可用时忽略
+  }
+}
+
+function persistPaneHeight() {
+  try {
+    localStorage.setItem(PASSAGE_HEIGHT_KEY, String(passageHeight.value))
+  } catch {
+    // localStorage 不可用时忽略
+  }
+}
+
+if (compactMedia) {
+  if (compactMedia.addEventListener) compactMedia.addEventListener('change', syncCompactLayout)
+  else compactMedia.addListener?.(syncCompactLayout)
+}
+
+// 拖拽起始快照：用位移量计算，避免布局变化导致抖动
+let dragStart = null
+
+function startResize(event) {
+  event.preventDefault()
+  if (!splitRef.value) return
+  const rect = splitRef.value.getBoundingClientRect()
+  resizing.value = true
+  dragStart = {
+    x: event.clientX,
+    y: event.clientY,
+    width: passageWidth.value,
+    height: passageHeight.value,
+    top: rect.top
+  }
+  try { event.currentTarget.setPointerCapture?.(event.pointerId) } catch { /* 忽略 */ }
+  document.body.classList.add('pane-resizing')
+  window.addEventListener('pointermove', onResize, { passive: false })
+  window.addEventListener('pointerup', stopResize)
+  window.addEventListener('pointercancel', stopResize)
+}
+
+function clamp(value, min, max) {
+  return Math.round(Math.min(Math.max(value, min), max))
+}
+
+function onResize(event) {
+  if (!resizing.value || !dragStart || !splitRef.value) return
+  event.preventDefault?.()
+  if (isCompact.value) {
+    // 移动端：上下拖动 = 调整正文高度（留出足够空间给题目）
+    const min = 120
+    const max = Math.max(min + 80, window.innerHeight - 240)
+    passageHeight.value = clamp(dragStart.height + (event.clientY - dragStart.y), min, max)
+    return
+  }
+  const rect = splitRef.value.getBoundingClientRect()
+  const max = Math.max(320, rect.width - 300)
+  passageWidth.value = clamp(dragStart.width + (event.clientX - dragStart.x), 260, max)
+}
+
+function stopResize() {
+  if (!resizing.value) return
+  resizing.value = false
+  dragStart = null
+  document.body.classList.remove('pane-resizing')
+  window.removeEventListener('pointermove', onResize)
+  window.removeEventListener('pointerup', stopResize)
+  window.removeEventListener('pointercancel', stopResize)
+  persistPaneWidth()
+  persistPaneHeight()
+}
+
+function resetPaneWidth() {
+  passageWidth.value = DEFAULT_PANE_WIDTH
+  passageHeight.value = DEFAULT_PANE_HEIGHT
+  persistPaneWidth()
+  persistPaneHeight()
+}
+
+const paneStyle = computed(() => (isCompact.value
+  ? { height: `${passageHeight.value}px`, maxHeight: 'none' }
+  : { flexBasis: `${passageWidth.value}px` }))
+
+onBeforeUnmount(() => {
+  if (compactMedia) {
+    if (compactMedia.removeEventListener) compactMedia.removeEventListener('change', syncCompactLayout)
+    else compactMedia.removeListener?.(syncCompactLayout)
+  }
+  window.removeEventListener('pointermove', onResize)
+  window.removeEventListener('pointerup', stopResize)
+})
 
 const currentCategory = computed(() => examCategories.find(item => item.key === selectedCategory.value))
 const canManagePapers = computed(() => userStore.userRole === 'ADMIN' && route.name !== 'AdminPastPapersPreview')
@@ -202,6 +375,13 @@ const isListeningQuestion = computed(() => {
   return false
 })
 const questionType = computed(() => currentQuestion.value?.type || 'single_choice')
+// 题干移入左栏：题目没有独立 passage、也不是听力，且题干是长文本（如选词填空的整段文章）时，
+// 把题干当作"正文"放到左侧阅读栏，右栏只留题型/题号/选项
+const STEM_PANE_THRESHOLD = 120
+const stemInPane = computed(() => {
+  const q = currentQuestion.value
+  return !!q && !q.passage && !isListeningQuestion.value && typeof q.stem === 'string' && q.stem.length > STEM_PANE_THRESHOLD
+})
 const answerValue = computed(() => answers.value[currentQuestion.value?.id])
 const answeredCount = computed(() => activePaper.value?.questions.filter(isAnswered).length || 0)
 const progress = computed(() => activePaper.value ? (answeredCount.value / activePaper.value.questions.length) * 100 : 0)
@@ -276,6 +456,13 @@ function cleanOptionText(text) {
     .replace(/\.?\s*听(?:下)?一?段?(?:对话|独白|短文)[^。]*[。]?\s*$/i, '')
     .trim()
 }
+
+// 切题后正文/题目两个面板都回到顶部
+watch(() => [currentQuestion.value?.passage, currentQuestion.value?.stem, currentIndex.value], async () => {
+  await nextTick()
+  if (passageBody.value) passageBody.value.scrollTop = 0
+  if (questionCardRef.value) questionCardRef.value.scrollTop = 0
+})
 
 watch([currentIndex, activePaper, isListeningQuestion], async () => {
   await nextTick()
@@ -433,22 +620,48 @@ onMounted(loadImportedPapers)
 .start-button, .primary-button { border: 1px solid var(--xy-brand-700); background: var(--xy-brand-700); color: #fff; }
 .secondary-button { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
 button:disabled { opacity: .45; cursor: not-allowed; }
-.exam-area { max-width: 820px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.exam-area { max-width: 1400px; width: 100%; margin: 0 auto; box-sizing: border-box; }
 .progress-line { height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden; margin-bottom: 14px; }
 .progress-line span { display: block; height: 100%; background: var(--xy-brand-700); transition: width .2s ease; }
-.question-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 22px; }
+.exam-split { display: flex; align-items: stretch; }
+.passage-pane { flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; position: sticky; top: 12px; align-self: flex-start; width: auto; max-height: calc(100vh - 210px); min-height: 240px; }
+.passage-pane-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; color: #334155; font-weight: 700; font-size: 13px; flex: 0 0 auto; }
+.pane-toggle { width: 28px; height: 28px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #64748b; display: grid; place-items: center; cursor: pointer; }
+.pane-toggle:hover { border-color: var(--xy-brand-700); color: var(--xy-brand-700); }
+.passage-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 16px; line-height: 1.8; white-space: pre-wrap; color: #1f2937; font-size: 15px; }
+.passage-empty { color: #94a3b8; }
+.split-handle { flex: 0 0 14px; margin: 0 5px; cursor: col-resize; position: relative; touch-action: none; user-select: none; border-radius: 6px; }
+.split-handle::after { content: ''; position: absolute; top: 0; bottom: 0; left: 5px; width: 4px; border-radius: 2px; background: #dbe2ea; transition: background .15s ease; }
+.split-handle:hover::after, .split-handle:active::after, body.pane-resizing .split-handle::after { background: var(--xy-brand-700); }
+body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
+.pane-restore { display: inline-flex; align-items: center; gap: 4px; min-height: 26px; margin-left: 10px; padding: 0 10px; border: 1px solid var(--xy-brand-700); border-radius: 999px; background: #fff; color: var(--xy-brand-700); font-size: 12px; font-weight: 600; cursor: pointer; }
+.pane-restore:hover { background: var(--xy-brand-50); }
+.question-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 22px; flex: 1 1 auto; min-width: 0; max-height: calc(100vh - 210px); overflow-y: auto; overscroll-behavior: contain; }
+.question-card::-webkit-scrollbar { width: 8px; }
+.question-card::-webkit-scrollbar-thumb { background: #d7dee6; border-radius: 4px; }
+.question-card::-webkit-scrollbar-thumb:hover { background: #bcc7d2; }
 .question-meta { display: flex; justify-content: space-between; gap: 12px; color: #64748b; font-size: 13px; }
-.passage { margin: 20px 0 14px; padding: 14px; background: #f8fafc; border-left: 3px solid #94a3b8; line-height: 1.75; }
+.meta-right { display: inline-flex; align-items: center; }
 .question-card h2 { margin: 18px 0; font-size: 18px; line-height: 1.6; }
-.listening-player { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 14px 0 18px; padding: 12px; background: var(--xy-brand-50); border: 1px solid #bfdbfe; border-radius: 6px; }
-.listening-player audio { flex: 1 1 360px; min-width: 240px; height: 40px; }
-.listening-label { color: var(--xy-brand-700); font-weight: 700; }
-.listening-player label { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 13px; }
-.listening-player select { min-height: 34px; border: 1px solid #93c5fd; border-radius: 5px; padding: 4px 8px; background: #fff; }
+.listening-player { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 14px; padding: 8px 10px; background: var(--xy-brand-50); border: 1px solid #bfdbfe; border-radius: 6px; }
+.listening-player audio { flex: 1 1 360px; min-width: 240px; height: 36px; }
+.listening-label { color: var(--xy-brand-700); font-weight: 700; font-size: 13px; }
+.listening-player label { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 12px; }
+.listening-player select { min-height: 28px; border: 1px solid #93c5fd; border-radius: 5px; padding: 2px 6px; background: #fff; font-size: 12px; }
+@media (max-width: 900px) {
+  .listening-player { gap: 4px 8px; margin: 8px 0 10px; padding: 6px 8px; }
+  .listening-label { order: 1; }
+  .listening-player label { order: 2; margin-left: auto; }
+  .listening-player audio { order: 3; flex: 1 1 100%; min-width: 0; height: 30px; }
+}
 .options { display: grid; gap: 10px; }
 .structured-answers { display: grid; gap: 12px; }
 .structured-answers label { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(180px, 260px); align-items: center; gap: 12px; line-height: 1.5; }
 .structured-answers select { min-height: 42px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px 10px; background: #fff; }
+.structured-answers.matching-answers label { grid-template-columns: 1fr minmax(110px, 160px); }
+.option-list { margin-top: 16px; padding-top: 14px; border-top: 1px dashed #cbd5e1; display: grid; gap: 10px; font-size: 14px; line-height: 1.7; color: #1f2937; }
+.option-list p { margin: 0; }
+.option-list strong { color: var(--xy-brand-700); margin-right: 4px; }
 .subjective-answer { width: 100%; min-height: 220px; resize: vertical; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px; font: inherit; line-height: 1.7; }
 .reference-answer { white-space: pre-wrap; padding: 10px; background: #fff; }
 .option-button { width: 100%; min-height: 52px; text-align: left; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid #dbe2ea; border-radius: 6px; background: #fff; color: #334155; cursor: pointer; line-height: 1.5; }
@@ -471,5 +684,35 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .paper-actions .start-button { flex: 1; }
   .question-card { padding: 16px; }
   .structured-answers label { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  /* 移动端：上下堆叠，拖拽条变成「可上下滑动的把手」，调整正文高度 */
+  .exam-split { flex-direction: column; }
+  .split-handle {
+    display: flex; align-items: center; justify-content: center;
+    flex: 0 0 30px; margin: 0; cursor: row-resize;
+    touch-action: none;
+  }
+  .split-handle::after {
+    position: static; inset: auto;
+    width: 56px; height: 5px; border-radius: 3px;
+    background: #cbd5e1;
+  }
+  .split-handle:hover::after, .split-handle:active::after, body.pane-resizing .split-handle::after { background: var(--xy-brand-700); }
+  body.pane-resizing { cursor: row-resize; }
+  .passage-pane {
+    position: static; max-height: none;
+    flex-basis: auto !important; width: 100%; margin-bottom: 0;
+    min-height: 120px;
+  }
+  .passage-body { padding: 14px; font-size: 15px; }
+  /* 移动端：题目区也变成独立可滑动区域（拖正文把手可改变两区高度分配） */
+  .question-card {
+    max-height: calc(100dvh - 235px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 </style>

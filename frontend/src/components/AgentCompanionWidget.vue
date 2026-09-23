@@ -76,14 +76,18 @@
     </section>
 
     <button
+      ref="launcherRef"
       type="button"
       class="companion-launcher"
+      :class="{ 'is-dragging': launcherDragging }"
+      :style="launcherStyle"
       :aria-label="unreadCount ? `打开小芽，有 ${unreadCount} 条未读消息` : '打开小芽，开始英语学习对话'"
       aria-controls="agent-companion-panel"
       :aria-expanded="expanded"
-      @click="togglePanel"
+      @pointerdown="onLauncherPointerDown"
+      @click="onLauncherClick"
     >
-      <AgentMascot :size="62" :stage="growthStage" />
+      <span class="launcher-mascot"><AgentMascot :size="62" :stage="growthStage" /></span>
       <span class="launcher-name">小芽</span>
       <span v-if="unreadCount" class="unread-badge" aria-label="未读消息">{{ badgeLabel }}</span>
     </button>
@@ -162,6 +166,89 @@ const startRefreshing = () => {
 const stopRefreshing = () => {
   if (refreshTimer) clearInterval(refreshTimer)
   refreshTimer = null
+}
+
+// ===== 小芽悬浮球：可拖拽移动 + 位置记忆 =====
+const LAUNCHER_POS_KEY = 'langhack-xiaoya-launcher-pos-v1'
+const launcherRef = ref(null)
+const launcherPos = ref(readLauncherPos())
+const launcherDragging = ref(false)
+let launcherDrag = null
+let launcherMovedByDrag = false
+
+function readLauncherPos() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LAUNCHER_POS_KEY) || 'null')
+    if (raw && Number.isFinite(raw.x) && Number.isFinite(raw.y)) return raw
+  } catch { /* 忽略 */ }
+  return null
+}
+
+function persistLauncherPos() {
+  try {
+    if (launcherPos.value) localStorage.setItem(LAUNCHER_POS_KEY, JSON.stringify(launcherPos.value))
+  } catch { /* 忽略 */ }
+}
+
+function clampLauncherPos(pos) {
+  const el = launcherRef.value
+  const w = el?.offsetWidth || 78
+  const h = el?.offsetHeight || 84
+  return {
+    x: Math.round(Math.min(Math.max(pos.x, 4), Math.max(4, window.innerWidth - w - 4))),
+    y: Math.round(Math.min(Math.max(pos.y, 4), Math.max(4, window.innerHeight - h - 4)))
+  }
+}
+
+// 拖拽过就用 left/top 绝对定位，覆盖默认的 right/bottom 样式
+const launcherStyle = computed(() => (launcherPos.value
+  ? { left: `${launcherPos.value.x}px`, top: `${launcherPos.value.y}px`, right: 'auto', bottom: 'auto' }
+  : {}))
+
+function onLauncherPointerDown(event) {
+  if (!launcherRef.value) return
+  const rect = launcherRef.value.getBoundingClientRect()
+  launcherDrag = {
+    startX: event.clientX,
+    startY: event.clientY,
+    origLeft: rect.left,
+    origTop: rect.top,
+    moved: false
+  }
+  launcherMovedByDrag = false
+  try { event.currentTarget.setPointerCapture?.(event.pointerId) } catch { /* 忽略 */ }
+  window.addEventListener('pointermove', onLauncherPointerMove, { passive: false })
+  window.addEventListener('pointerup', onLauncherPointerUp)
+  window.addEventListener('pointercancel', onLauncherPointerUp)
+}
+
+function onLauncherPointerMove(event) {
+  if (!launcherDrag) return
+  const dx = event.clientX - launcherDrag.startX
+  const dy = event.clientY - launcherDrag.startY
+  if (!launcherDrag.moved && Math.hypot(dx, dy) < 8) return
+  if (!launcherDrag.moved) {
+    launcherDrag.moved = true
+    launcherMovedByDrag = true
+    launcherDragging.value = true
+  }
+  event.preventDefault?.()
+  launcherPos.value = clampLauncherPos({ x: launcherDrag.origLeft + dx, y: launcherDrag.origTop + dy })
+}
+
+function onLauncherPointerUp() {
+  window.removeEventListener('pointermove', onLauncherPointerMove)
+  window.removeEventListener('pointerup', onLauncherPointerUp)
+  window.removeEventListener('pointercancel', onLauncherPointerUp)
+  if (launcherDrag?.moved) persistLauncherPos()
+  launcherDrag = null
+  // click 事件在 pointerup 之后触发，延迟一点再清 flag，让 onLauncherClick 能识别“刚拖完”
+  setTimeout(() => { launcherDragging.value = false; launcherMovedByDrag = false }, 60)
+}
+
+function onLauncherClick() {
+  if (launcherMovedByDrag) return
+  togglePanel()
 }
 
 const togglePanel = () => {
@@ -255,6 +342,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopRefreshing()
+  window.removeEventListener('pointermove', onLauncherPointerMove)
+  window.removeEventListener('pointerup', onLauncherPointerUp)
+  window.removeEventListener('pointercancel', onLauncherPointerUp)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   document.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('langhack:agent-messages-changed', refreshUnread)
@@ -265,10 +355,21 @@ onUnmounted(() => {
 <style scoped>
 .companion-widget { position: relative; z-index: 3000; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
 .companion-scrim { position: fixed; inset: 0; background: rgba(14, 38, 31, .18); z-index: 0; }
-.companion-launcher { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; min-height: 84px; padding: 4px 4px 6px; border: 1px solid #d4f0e3; border-radius: 26px; background: rgba(255, 255, 255, .97); box-shadow: 0 8px 28px rgba(24, 94, 69, .2); cursor: pointer; color: #176e51; }
-.companion-launcher:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(24, 94, 69, .27); }
+.companion-launcher { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(88px + env(safe-area-inset-bottom, 0px)); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 78px; min-height: 84px; padding: 4px 4px 6px; border: 0; border-radius: 26px; background: transparent; box-shadow: none; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; color: #176e51; }
+.companion-launcher.is-dragging { cursor: grabbing; }
+.companion-launcher.is-dragging .launcher-mascot { animation: none; }
+.companion-launcher:hover { transform: translateY(-3px); }
 .companion-launcher:focus-visible, .companion-panel button:focus-visible { outline: 3px solid #21a474; outline-offset: 2px; }
-.launcher-name { margin-top: -4px; font-size: 12px; font-weight: 800; }
+/* 小芽本体：周期性小跳跃动画（挂在内层，不与拖拽/hover 的 transform 冲突） */
+.launcher-mascot { display: inline-flex; line-height: 0; transform-origin: 50% 100%; animation: xiaoya-bounce 2.8s ease-in-out infinite; }
+.launcher-name { margin-top: -4px; font-size: 12px; font-weight: 800; text-shadow: 0 1px 6px rgba(255, 255, 255, .9), 0 0 2px rgba(255, 255, 255, .8); }
+@keyframes xiaoya-bounce {
+  0%, 56%, 100% { transform: translateY(0) scale(1, 1); }
+  63% { transform: translateY(-10px) scale(.98, 1.03); }
+  72% { transform: translateY(0) scale(1.04, .96); }
+  80% { transform: translateY(-4px) scale(1, 1); }
+  88% { transform: translateY(0) scale(1, 1); }
+}
 .unread-badge { position: absolute; top: -7px; right: -6px; display: grid; place-items: center; min-width: 23px; height: 23px; padding: 0 5px; border: 2px solid white; border-radius: 14px; background: #ef4967; color: white; font-size: 11px; font-weight: 800; }
 .companion-panel { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(186px + env(safe-area-inset-bottom, 0px)); z-index: 1; display: flex; flex-direction: column; width: min(420px, calc(100vw - 28px)); height: min(620px, calc(100dvh - 210px)); min-height: 280px; overflow: hidden; border: 1px solid #d3eadf; border-radius: 24px; background: white; box-shadow: 0 22px 55px rgba(15, 66, 49, .26); }
 .companion-header { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; padding: 10px 14px; background: linear-gradient(115deg, #e8fff5, #f7fffb); border-bottom: 1px solid #e0f1e9; }
@@ -302,5 +403,5 @@ onUnmounted(() => {
 .is-chat-page .companion-launcher { top: calc(70px + env(safe-area-inset-top, 0px)); bottom: auto; }
 .is-chat-page .companion-panel { top: calc(158px + env(safe-area-inset-top, 0px)); bottom: auto; height: min(620px, calc(100dvh - 176px)); }
 @media (max-width: 480px) { .companion-panel { height: calc(100dvh - 195px); } .is-immersive .companion-panel { height: calc(100dvh - 125px); } }
-@media (prefers-reduced-motion: reduce) { .companion-launcher:hover { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .companion-launcher:hover { transform: none; } .launcher-mascot { animation: none; } }
 </style>
