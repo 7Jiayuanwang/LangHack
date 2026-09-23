@@ -58,7 +58,6 @@ const mascotStyle = computed(() => ({
   background: linear-gradient(145deg, #6ed6a5, #24a978);
 }
 
-.stage-seed .mascot-leaf { transform-origin: bottom center; scale: .82; }
 .stage-sprout .mascot-head { background: linear-gradient(145deg, #f5fff5, #a5eec6 55%, #68cda3); }
 .leaf-crown { left: 46%; top: -7%; width: 25%; height: 29%; border-radius: 100% 5% 100% 10%; transform: rotate(28deg); }
 .mascot-flower { position: absolute; z-index: 4; left: 48%; top: -10%; width: 14%; height: 14%; border: 2px solid #fff3c6; border-radius: 50%; background: #ffc96f; box-shadow: calc(var(--mascot-size) * -.1) 0 #f9a5ae, calc(var(--mascot-size) * .1) 0 #f9a5ae, 0 calc(var(--mascot-size) * -.1) #f9a5ae, 0 calc(var(--mascot-size) * .1) #f9a5ae; }
