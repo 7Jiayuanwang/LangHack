@@ -52,29 +52,27 @@ const mascotStyle = computed(() => ({
 .mascot-leaf {
   position: absolute;
   z-index: 2;
-  top: -17%;
-  width: 21%;
-  height: 48%;
-  background: linear-gradient(160deg, #8ce8b8 0%, #4cc795 45%, #1fa573 100%);
-  border-radius: 50% 50% 42% 42% / 68% 68% 32% 32%;
+  top: 0;
+  width: 31%;
+  height: 34%;
+  background: linear-gradient(145deg, #6ed6a5, #24a978);
 }
 
 .stage-seed .mascot-leaf { transform-origin: bottom center; scale: .82; }
 .stage-sprout .mascot-head { background: linear-gradient(145deg, #f5fff5, #a5eec6 55%, #68cda3); }
-.leaf-crown { left: 44%; top: -13%; width: 24%; height: 27%; border-radius: 100% 5% 100% 10%; transform: rotate(6deg); }
+.leaf-crown { left: 46%; top: -7%; width: 25%; height: 29%; border-radius: 100% 5% 100% 10%; transform: rotate(28deg); }
 .mascot-flower { position: absolute; z-index: 4; left: 48%; top: -10%; width: 14%; height: 14%; border: 2px solid #fff3c6; border-radius: 50%; background: #ffc96f; box-shadow: calc(var(--mascot-size) * -.1) 0 #f9a5ae, calc(var(--mascot-size) * .1) 0 #f9a5ae, 0 calc(var(--mascot-size) * -.1) #f9a5ae, 0 calc(var(--mascot-size) * .1) #f9a5ae; }
 
-/* 兔耳造型：两片叶子根部合住在头顶中心，叶尖向两边微微分开 */
 .leaf-left {
-  left: 39%;
-  transform-origin: bottom center;
-  transform: rotate(-13deg);
+  left: 27%;
+  border-radius: 100% 5% 100% 10%;
+  transform: rotate(-28deg);
 }
 
 .leaf-right {
-  left: 39%;
-  transform-origin: bottom center;
-  transform: rotate(13deg);
+  right: 24%;
+  border-radius: 5% 100% 10% 100%;
+  transform: rotate(25deg) scale(0.82);
 }
 
 .mascot-eye {
