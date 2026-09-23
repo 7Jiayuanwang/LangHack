@@ -20,9 +20,9 @@ defineProps({ size: { type: Number, default: 72 }, decorative: { type: Boolean, 
 <style scoped>
 .xy-mascot { position: relative; flex: 0 0 auto; width: var(--xy-mascot-size); height: var(--xy-mascot-size); filter: drop-shadow(0 10px 18px rgba(31, 122, 92, 0.22)); }
 .xy-mascot__head { position: absolute; inset: 14% 6% 5%; border: 2px solid rgba(255,255,255,.9); border-radius: 46% 46% 42% 42%; background: linear-gradient(145deg, #f5fff5, #baf2d1 55%, #7bd8b2); box-shadow: inset 0 -8px 14px rgba(24,135,94,.12); }
-.xy-mascot__leaf { position: absolute; z-index: 2; top: 0; width: 31%; height: 34%; background: linear-gradient(145deg, #6ed6a5, #24a978); }
-.xy-mascot__leaf--left { left: 27%; border-radius: 100% 5% 100% 10%; transform: rotate(-28deg); }
-.xy-mascot__leaf--right { right: 24%; border-radius: 5% 100% 10% 100%; transform: rotate(25deg) scale(.82); }
+.xy-mascot__leaf { position: absolute; z-index: 2; top: -17%; width: 21%; height: 48%; background: linear-gradient(160deg, #8ce8b8 0%, #4cc795 45%, #1fa573 100%); border-radius: 50% 50% 42% 42% / 68% 68% 32% 32%; }
+.xy-mascot__leaf--left { left: 39%; transform-origin: bottom center; transform: rotate(-13deg); }
+.xy-mascot__leaf--right { left: 39%; transform-origin: bottom center; transform: rotate(13deg); }
 .xy-mascot__eye { position: absolute; top: 39%; width: 9%; height: 12%; border-radius: 50%; background: #164b3c; box-shadow: inset 1px 1px 0 rgba(255,255,255,.8); }
 .xy-mascot__eye--left { left: 29%; }
 .xy-mascot__eye--right { right: 29%; }
