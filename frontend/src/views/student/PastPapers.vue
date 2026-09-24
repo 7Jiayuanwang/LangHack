@@ -114,12 +114,23 @@
 
         <div v-if="isListeningQuestion" class="listening-player">
           <div class="listening-label">听力材料</div>
-          <audio ref="audioElement" :src="currentQuestion.audioUrl || activePaper.audioUrl" controls preload="metadata"></audio>
-          <label>倍速
-            <select v-model.number="playbackRate" @change="syncPlaybackRate">
-              <option :value="0.5">0.5x</option><option :value="0.75">0.75x</option><option :value="1">1x</option><option :value="1.25">1.25x</option><option :value="1.5">1.5x</option><option :value="2">2x</option>
-            </select>
-          </label>
+          <div class="lp-controls">
+            <button type="button" class="lp-btn" :aria-label="lpPlaying ? '暂停' : '播放'" @click="toggleLpPlay">{{ lpPlaying ? '❚❚' : '▶' }}</button>
+            <span class="lp-time">{{ lpFmt(lpCurrent) }}</span>
+            <input class="lp-seek" type="range" min="0" :max="lpDuration || 0" step="0.1" :value="lpCurrent" :disabled="!lpDuration" aria-label="播放进度" @input="onLpSeek($event)">
+            <span class="lp-time">{{ lpFmt(lpDuration) }}</span>
+            <label>倍速
+              <select v-model.number="playbackRate" @change="syncPlaybackRate">
+                <option :value="0.5">0.5x</option><option :value="0.75">0.75x</option><option :value="1">1x</option><option :value="1.25">1.25x</option><option :value="1.5">1.5x</option><option :value="2">2x</option>
+              </select>
+            </label>
+          </div>
+          <!-- 隐藏的媒体元素：不用原生 controls，避免手机浏览器再弹一个自带的"播放速度"菜单 -->
+          <audio ref="audioElement" class="lp-audio" :src="currentQuestion.audioUrl || activePaper.audioUrl" preload="metadata"
+            @play="lpPlaying = true" @pause="lpPlaying = false" @ended="lpPlaying = false"
+            @timeupdate="lpCurrent = $event.target.currentTime"
+            @loadedmetadata="lpDuration = $event.target.duration || 0"
+            @durationchange="lpDuration = Number.isFinite($event.target.duration) ? $event.target.duration : 0"></audio>
         </div>
 
         <div v-if="questionType === 'single_choice' || questionType === 'listening'" class="options" role="radiogroup" :aria-label="currentQuestion.stem">
@@ -363,6 +374,29 @@ const filteredPapers = computed(() => allPapers.value.filter(item => item.catego
 const currentQuestion = computed(() => activePaper.value?.questions[currentIndex.value])
 const audioElement = ref(null)
 const playbackRate = ref(1)
+// 自定义听力播放器状态（原生 audio controls 的浏览器自带"播放速度"菜单与页面倍速下拉重复，故自制 UI）
+const lpPlaying = ref(false)
+const lpCurrent = ref(0)
+const lpDuration = ref(0)
+const toggleLpPlay = () => {
+  const a = audioElement.value
+  if (!a || !a.src) return
+  if (a.paused) a.play().catch(() => {})
+  else a.pause()
+}
+const onLpSeek = (e) => {
+  const a = audioElement.value
+  if (!a || !lpDuration.value) return
+  const t = Number(e.target.value)
+  a.currentTime = t
+  lpCurrent.value = t
+}
+const lpFmt = (s) => {
+  if (!Number.isFinite(s) || s <= 0) return '0:00'
+  const m = Math.floor(s / 60)
+  const sec = Math.floor(s % 60)
+  return m + ':' + String(sec).padStart(2, '0')
+}
 // 是否听力题：兼容两种判断方式
 // 1) type === 'listening'（后端正确标记的听力题）
 // 2) section 包含"听力"（题库导入时即便 type 是 single_choice，section 标了"听力理解"也算）
@@ -432,6 +466,9 @@ function startPaper(paper) {
   answers.value = {}
   submitted.value = false
   playbackRate.value = 1
+  lpPlaying.value = false
+  lpCurrent.value = 0
+  lpDuration.value = 0
 }
 
 function syncPlaybackRate() {
@@ -471,6 +508,9 @@ watch([currentIndex, activePaper, isListeningQuestion], async () => {
     audioElement.value.pause()
     audioElement.value.currentTime = 0
     audioElement.value.src = ''
+    lpPlaying.value = false
+    lpCurrent.value = 0
+    lpDuration.value = 0
   } else {
     syncPlaybackRate()
   }
@@ -644,7 +684,13 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
 .meta-right { display: inline-flex; align-items: center; }
 .question-card h2 { margin: 18px 0; font-size: 18px; line-height: 1.6; }
 .listening-player { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 14px; padding: 8px 10px; background: var(--xy-brand-50); border: 1px solid #bfdbfe; border-radius: 6px; }
-.listening-player audio { flex: 1 1 360px; min-width: 240px; height: 36px; }
+.listening-player .lp-audio { display: none; }
+.lp-controls { display: flex; align-items: center; gap: 8px; flex: 1 1 340px; min-width: 240px; }
+.lp-btn { flex: 0 0 auto; width: 34px; height: 34px; border: none; border-radius: 50%; background: var(--xy-brand-600, #2563eb); color: #fff; font-size: 11px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.lp-btn:hover { filter: brightness(1.08); }
+.lp-btn:disabled { background: #94a3b8; cursor: default; }
+.lp-time { flex: 0 0 auto; color: #475569; font-size: 12px; font-variant-numeric: tabular-nums; min-width: 34px; text-align: center; }
+.lp-seek { flex: 1 1 110px; min-width: 70px; height: 4px; accent-color: var(--xy-brand-600, #2563eb); cursor: pointer; }
 .listening-label { color: var(--xy-brand-700); font-weight: 700; font-size: 13px; }
 .listening-player label { display: inline-flex; align-items: center; gap: 6px; color: #334155; font-size: 12px; }
 .listening-player select { min-height: 28px; border: 1px solid #93c5fd; border-radius: 5px; padding: 2px 6px; background: #fff; font-size: 12px; }
@@ -652,7 +698,8 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
   .listening-player { gap: 4px 8px; margin: 8px 0 10px; padding: 6px 8px; }
   .listening-label { order: 1; }
   .listening-player label { order: 2; margin-left: auto; }
-  .listening-player audio { order: 3; flex: 1 1 100%; min-width: 0; height: 30px; }
+  .lp-controls { order: 3; flex: 1 1 100%; min-width: 0; gap: 6px; }
+  .lp-btn { width: 32px; height: 32px; }
 }
 .options { display: grid; gap: 10px; }
 .structured-answers { display: grid; gap: 12px; }
