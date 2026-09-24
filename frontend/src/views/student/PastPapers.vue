@@ -176,6 +176,39 @@
           @input="setTextAnswer($event.target.value)"
         ></textarea>
 
+        <div v-if="questionType === 'writing'" class="writing-score">
+          <button type="button" class="writing-score-btn" :disabled="writingScoring" @click="scoreWriting">
+            {{ writingScoring ? '小芽正在批改…' : 'AI 智能评分' }}
+          </button>
+          <span class="writing-score-hint">按四六级 15 分制，从内容 / 结构 / 语言三维度评分</span>
+          <p v-if="writingScoreError" class="writing-score-note">{{ writingScoreError }}</p>
+          <div v-if="writingScore" class="writing-score-card">
+            <p v-if="writingScore.rawFeedback" class="writing-feedback">{{ writingScore.rawFeedback }}</p>
+            <template v-else>
+              <div class="writing-total">
+                <strong>{{ writingScore.total }}</strong> / 15
+                <span v-if="writingScore.wordCount"> · {{ writingScore.wordCount }} 词</span>
+              </div>
+              <ul class="writing-dims">
+                <li v-for="(label, key) in { content: '内容', structure: '结构', language: '语言' }" :key="key">
+                  <span class="writing-dim-name">{{ label }}</span>
+                  <span class="writing-dim-score">{{ writingScore.dimensions[key]?.score ?? '—' }}/5</span>
+                  <span class="writing-dim-comment">{{ writingScore.dimensions[key]?.comment }}</span>
+                </li>
+              </ul>
+              <div v-if="writingScore.strengths && writingScore.strengths.length" class="writing-list">
+                <div class="writing-list-title">优点</div>
+                <ul><li v-for="(item, i) in writingScore.strengths" :key="'s' + i">{{ item }}</li></ul>
+              </div>
+              <div v-if="writingScore.improvements && writingScore.improvements.length" class="writing-list">
+                <div class="writing-list-title">改进建议</div>
+                <ul><li v-for="(item, i) in writingScore.improvements" :key="'i' + i">{{ item }}</li></ul>
+              </div>
+              <p v-if="writingScore.revisedSample" class="writing-sample">修改示例：{{ writingScore.revisedSample }}</p>
+            </template>
+          </div>
+        </div>
+
         <div v-if="submitted" class="analysis-panel">
           <div class="analysis-title">
             <template v-if="isSubjective(currentQuestion)">参考答案与评分要点</template>
@@ -188,7 +221,23 @@
           <p v-else-if="questionType === 'cloze'">正确答案：{{ currentQuestion.answers.map(index => optionLetter(index)).join('、') }}</p>
           <p v-else-if="questionType === 'matching'">正确答案：{{ currentQuestion.items.map(item => `${item.id}-${optionLetter(item.answer)}`).join('、') }}</p>
           <p v-else>正确答案：{{ optionLetter(currentQuestion.answer) }}</p>
-          <p>{{ currentQuestion.analysis }}</p>
+
+          <div class="analysis-question">
+            <div class="analysis-subtitle">本题解析</div>
+            <template v-if="currentAnalysis">
+              <details v-if="currentAnalysis.length > 1100" class="analysis-fold">
+                <summary>解析较长，点击展开全文（{{ currentAnalysis.length }} 字）</summary>
+                <p>{{ currentAnalysis }}</p>
+              </details>
+              <p v-else>{{ currentAnalysis }}</p>
+            </template>
+            <p v-else class="analysis-missing">本题暂无解析{{ currentShared ? `，可展开下方${currentShared.label}` : '' }}</p>
+          </div>
+
+          <details v-if="currentShared" class="analysis-fold analysis-source">
+            <summary>{{ currentShared.label }}（点击展开）</summary>
+            <p>{{ currentShared.text }}</p>
+          </details>
         </div>
         </section>
       </div>
@@ -217,7 +266,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, DArrowLeft, DArrowRight, Delete, Upload } from '@element-plus/icons-vue'
 import { examCategories, pastPapers } from '@/data/pastPapers'
 import PastPaperImportDialog from '@/components/past-papers/PastPaperImportDialog.vue'
-import { deleteSharedPastPaper, getSharedPastPapers, submitPastPaperAttempt } from '@/api/pastPapers'
+import { deleteSharedPastPaper, getSharedPastPapers, requestWritingScore, submitPastPaperAttempt } from '@/api/pastPapers'
+import { buildAnalysisIndex } from '@/utils/pastPaperAnalysis'
+import { localEssayScore, parseScorePayload } from '@/utils/writingScore'
 import { useUserStore } from '@/store/user'
 
 const STORAGE_KEY = 'langhack-past-paper-results'
@@ -372,6 +423,63 @@ const canManagePapers = computed(() => userStore.userRole === 'ADMIN' && route.n
 const allPapers = computed(() => [...sharedPapers.value, ...pastPapers])
 const filteredPapers = computed(() => allPapers.value.filter(item => item.category === selectedCategory.value))
 const currentQuestion = computed(() => activePaper.value?.questions[currentIndex.value])
+
+// ===== 解析按题对应 =====
+// 导入的真题数据里，每道题的 analysis 往往是一整块文档正文（听力原文 / 全文翻译
+// + 从该题起的多题解析）。这里建立索引，把「本题解析」和「共享材料」拆开渲染。
+const analysisIndex = computed(() => (activePaper.value ? buildAnalysisIndex(activePaper.value) : null))
+const currentAnalysis = computed(() => (analysisIndex.value ? analysisIndex.value.analysisFor(currentQuestion.value) : ''))
+const currentShared = computed(() => (analysisIndex.value ? analysisIndex.value.sharedFor(currentQuestion.value) : null))
+
+// ===== 作文 AI 判分 =====
+const writingScore = ref(null)
+const writingScoring = ref(false)
+const writingScoreError = ref('')
+const resetWritingScore = () => {
+  writingScore.value = null
+  writingScoreError.value = ''
+}
+
+async function scoreWriting() {
+  const question = currentQuestion.value
+  if (!question || question.type !== 'writing') return
+  const essay = String(answerValue.value || '').trim()
+  if (!essay) {
+    ElMessage.warning('请先写一段作文再评分')
+    return
+  }
+  if (essay.length > 2000) {
+    ElMessage.warning('作文过长（超过 2000 字），请精简后再评分')
+    return
+  }
+  writingScoring.value = true
+  writingScoreError.value = ''
+  try {
+    const response = await requestWritingScore(essay, question.stem)
+    const payload = response?.data ?? response
+    const parsed = parseScorePayload(payload)
+    if (parsed) {
+      writingScore.value = parsed
+    } else {
+      // 模型没按 JSON 返回时，退化为展示纯文本反馈
+      const text = typeof payload === 'string'
+        ? payload
+        : payload?.answer || payload?.content || payload?.message || ''
+      if (String(text).trim().length > 20) {
+        writingScore.value = { rawFeedback: String(text).trim() }
+      } else {
+        throw new Error('empty')
+      }
+    }
+  } catch (error) {
+    // AI 通道不可用（未配 key / 校园网不通）时给出本地参考分，保证功能可用
+    writingScore.value = { ...localEssayScore(essay, question.stem) }
+    writingScoreError.value = 'AI 判分暂时不可用，以下为本地参考评分（按篇幅、结构、语言估算）'
+    console.warn('作文 AI 判分失败，已降级为本地评分:', error)
+  } finally {
+    writingScoring.value = false
+  }
+}
 const audioElement = ref(null)
 const playbackRate = ref(1)
 // 自定义听力播放器状态（原生 audio controls 的浏览器自带"播放速度"菜单与页面倍速下拉重复，故自制 UI）
@@ -469,6 +577,7 @@ function startPaper(paper) {
   lpPlaying.value = false
   lpCurrent.value = 0
   lpDuration.value = 0
+  resetWritingScore()
 }
 
 function syncPlaybackRate() {
@@ -503,6 +612,7 @@ watch(() => [currentQuestion.value?.passage, currentQuestion.value?.stem, curren
 
 watch([currentIndex, activePaper, isListeningQuestion], async () => {
   await nextTick()
+  resetWritingScore()
   // 切换题目时，若当前不是听力题则自动暂停并停止播放，避免录音继续响
   if (!isListeningQuestion.value && audioElement.value) {
     audioElement.value.pause()
@@ -719,6 +829,41 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
 .analysis-panel { margin-top: 18px; padding: 15px; background: #f8fafc; border-left: 3px solid var(--xy-brand-700); }
 .analysis-title { display: flex; align-items: center; gap: 6px; font-weight: 700; }
 .analysis-panel p { margin: 8px 0 0; line-height: 1.65; color: #475569; }
+.analysis-question { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #cbd5e1; }
+.analysis-subtitle { font-weight: 700; color: #334155; font-size: 13px; }
+.analysis-missing { color: #94a3b8; font-size: 13px; }
+.analysis-fold { margin-top: 12px; }
+.analysis-fold > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--xy-brand-700); list-style: none; }
+.analysis-fold > summary::-webkit-details-marker { display: none; }
+.analysis-fold > summary::before { content: '▸ '; }
+.analysis-fold[open] > summary::before { content: '▾ '; }
+.analysis-fold p { white-space: pre-wrap; }
+.analysis-source { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; }
+.analysis-source p { max-height: 320px; overflow-y: auto; }
+
+.writing-score { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.writing-score-btn { border: none; border-radius: 6px; padding: 9px 18px; background: var(--xy-brand-600, #2563eb); color: #fff; font-weight: 700; cursor: pointer; }
+.writing-score-btn:hover { filter: brightness(1.08); }
+.writing-score-btn:disabled { background: #94a3b8; cursor: default; }
+.writing-score-hint { color: #64748b; font-size: 12px; }
+.writing-score-note { flex: 1 1 100%; margin: 0; color: #b45309; font-size: 12px; }
+.writing-score-card { flex: 1 1 100%; padding: 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; }
+.writing-total { font-size: 15px; color: #334155; }
+.writing-total strong { font-size: 28px; color: var(--xy-brand-700); }
+.writing-dims { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.writing-dims li { display: grid; grid-template-columns: 48px 62px 1fr; align-items: baseline; gap: 8px; font-size: 13px; }
+.writing-dim-name { font-weight: 700; color: #334155; }
+.writing-dim-score { color: var(--xy-brand-700); font-weight: 700; font-variant-numeric: tabular-nums; }
+.writing-dim-comment { color: #64748b; }
+.writing-list { margin-top: 12px; }
+.writing-list-title { font-weight: 700; font-size: 13px; color: #334155; }
+.writing-list ul { margin: 6px 0 0; padding-left: 20px; color: #475569; font-size: 13px; line-height: 1.65; }
+.writing-sample { margin-top: 12px; padding: 10px; background: #f1f5f9; border-radius: 6px; color: #475569; font-size: 13px; line-height: 1.65; }
+.writing-feedback { white-space: pre-wrap; line-height: 1.7; color: #475569; }
+@media (max-width: 900px) {
+  .writing-dims li { grid-template-columns: 42px 56px 1fr; font-size: 12px; }
+  .writing-score-btn { flex: 1 1 100%; }
+}
 .exam-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
 .score-bar { margin-top: 12px; text-align: center; color: #334155; }
 .score-bar strong { color: var(--xy-brand-700); font-size: 20px; }
