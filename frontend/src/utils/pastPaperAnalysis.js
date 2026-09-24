@@ -78,9 +78,11 @@ function latinRatio(text) {
 export function cleanAnalysisText(text) {
   if (!text) return ''
   let t = String(text).replace(/\r\n?/g, '\n')
-  // 「m…」「m•」「m…… 」这类导入时被破坏的符号占位
-  t = t.replace(/m\s*[…·•⋯]+/g, ' ')
-  t = t.replace(/[…·•⋯]{2,}/g, ' ')
+  // 「m…」「m•」「●m」这类导入时被破坏的符号占位（如「m…●审题思路●m」）
+  t = t.replace(/m\s*[…·•⋯●]+\s*●?/g, ' ')
+  t = t.replace(/●\s*m\b/g, ' ')
+  t = t.replace(/[…·•⋯●]{3,}/g, ' ')
+  t = t.replace(/●\s*/g, ' ')
   t = t.replace(/[「]/g, '[')
   // 套卷页眉：「2026年6月大学英语六级考试真题答案详解(共3套)·第1套」
   t = t.replace(/20\d{2}\s*年\s*\d{1,2}\s*月\s*大学英语[四六]级考试真题答案详解[^\n]{0,24}/g, ' ')
