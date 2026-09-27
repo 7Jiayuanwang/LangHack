@@ -225,11 +225,39 @@
           <div class="analysis-question">
             <div class="analysis-subtitle">本题解析</div>
             <template v-if="currentAnalysis">
-              <details v-if="currentAnalysis.length > 1100" class="analysis-fold">
+              <div v-if="currentAnalysis.length <= 1100" class="analysis-body">
+                <template v-if="formattedAnalysis">
+                  <p v-if="formattedAnalysis.locate" class="analysis-locate">{{ formattedAnalysis.locate }}</p>
+                  <section v-for="(block, bi) in formattedAnalysis.blocks" :key="bi" class="analysis-block">
+                    <div v-if="block.title" class="analysis-block-title">{{ block.title }}</div>
+                    <ul v-if="block.kind === 'list'" class="analysis-list">
+                      <li v-for="(line, li) in block.lines" :key="li">{{ line }}</li>
+                    </ul>
+                    <template v-else>
+                      <p v-for="(line, li) in block.lines" :key="li" :class="{ 'analysis-correct': block.kind === 'correct' }">{{ line }}</p>
+                    </template>
+                  </section>
+                </template>
+                <p v-else>{{ currentAnalysis }}</p>
+              </div>
+              <details v-else class="analysis-fold">
                 <summary>解析较长，点击展开全文（{{ currentAnalysis.length }} 字）</summary>
-                <p>{{ currentAnalysis }}</p>
+                <div class="analysis-body">
+                  <template v-if="formattedAnalysis">
+                    <p v-if="formattedAnalysis.locate" class="analysis-locate">{{ formattedAnalysis.locate }}</p>
+                    <section v-for="(block, bi) in formattedAnalysis.blocks" :key="bi" class="analysis-block">
+                      <div v-if="block.title" class="analysis-block-title">{{ block.title }}</div>
+                      <ul v-if="block.kind === 'list'" class="analysis-list">
+                        <li v-for="(line, li) in block.lines" :key="li">{{ line }}</li>
+                      </ul>
+                      <template v-else>
+                        <p v-for="(line, li) in block.lines" :key="li" :class="{ 'analysis-correct': block.kind === 'correct' }">{{ line }}</p>
+                      </template>
+                    </section>
+                  </template>
+                  <p v-else>{{ currentAnalysis }}</p>
+                </div>
               </details>
-              <p v-else>{{ currentAnalysis }}</p>
             </template>
             <p v-else class="analysis-missing">本题暂无解析{{ currentShared ? `，可展开下方${currentShared.label}` : '' }}</p>
           </div>
@@ -267,7 +295,7 @@ import { ArrowLeft, ArrowRight, CircleCheck, CircleClose, DArrowLeft, DArrowRigh
 import { examCategories, pastPapers } from '@/data/pastPapers'
 import PastPaperImportDialog from '@/components/past-papers/PastPaperImportDialog.vue'
 import { deleteSharedPastPaper, getSharedPastPapers, requestWritingScore, submitPastPaperAttempt } from '@/api/pastPapers'
-import { buildAnalysisIndex } from '@/utils/pastPaperAnalysis'
+import { buildAnalysisIndex, formatAnalysis } from '@/utils/pastPaperAnalysis'
 import { localEssayScore, parseScorePayload } from '@/utils/writingScore'
 import { useUserStore } from '@/store/user'
 
@@ -430,6 +458,8 @@ const currentQuestion = computed(() => activePaper.value?.questions[currentIndex
 const analysisIndex = computed(() => (activePaper.value ? buildAnalysisIndex(activePaper.value) : null))
 const currentAnalysis = computed(() => (analysisIndex.value ? analysisIndex.value.analysisFor(currentQuestion.value) : ''))
 const currentShared = computed(() => (analysisIndex.value ? analysisIndex.value.sharedFor(currentQuestion.value) : null))
+// 解析结构化排版：定位/正确项/干扰项排除列表；无法结构化时模板回退纯文本
+const formattedAnalysis = computed(() => (currentAnalysis.value ? formatAnalysis(currentAnalysis.value) : null))
 
 // ===== 作文 AI 判分 =====
 const writingScore = ref(null)
@@ -832,6 +862,14 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
 .analysis-question { margin-top: 12px; padding-top: 12px; border-top: 1px dashed #cbd5e1; }
 .analysis-subtitle { font-weight: 700; color: #334155; font-size: 13px; }
 .analysis-missing { color: #94a3b8; font-size: 13px; }
+.analysis-body { margin-top: 2px; }
+.analysis-locate { margin-top: 10px; padding: 8px 10px; background: #f1f5f9; border-left: 3px solid #94a3b8; border-radius: 4px; font-size: 13px; color: #334155; }
+.analysis-block { margin-top: 12px; }
+.analysis-block-title { font-size: 12px; font-weight: 700; color: var(--xy-brand-700, #2563eb); margin-bottom: 2px; }
+.analysis-correct { margin-top: 10px; padding: 8px 10px; background: #f0fdf4; border-left: 3px solid #86efac; border-radius: 4px; }
+.analysis-list { list-style: none; margin: 0; padding: 0; }
+.analysis-list li { position: relative; padding-left: 14px; margin-top: 6px; line-height: 1.7; }
+.analysis-list li::before { content: ''; position: absolute; left: 2px; top: 0.66em; width: 5px; height: 5px; border-radius: 50%; background: #cbd5e1; }
 .analysis-fold { margin-top: 12px; }
 .analysis-fold > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--xy-brand-700); list-style: none; }
 .analysis-fold > summary::-webkit-details-marker { display: none; }

@@ -344,3 +344,135 @@ export function buildAnalysisIndex(paper) {
 
   return { analysisFor, sharedFor, byNumber, listeningHead, translationByNumber }
 }
+
+/* ==================== 解析文本结构化排版 ====================
+ * 导入数据的解析是一整段无分段文字（「干扰项排除」与正确项分析挤在
+ * 一起、中英文粘连、半角全角标点混用）。这里把它整理为结构化块：
+ *   { locate: '定位句…', blocks: [ { title, kind: 'para'|'list', lines } ] }
+ * 列表块（干扰项排除）逐选项一行，段落块按句切分，阅读不再喘不过气。 */
+
+const CJK = '一-鿿・'
+const EXCLUDE_TITLES = '干扰项排除|排除干扰项|干扰项分析|选项辨析|选项分析|错误选项分析'
+const ESSAY_TITLES = '审题思路|写作思路|写作要点|审题要点|参考范文|范文点评|范文解析|解题思路|要点解析|翻译要点|翻译点拨|句意分析|选项归类|答案详解|长难句分析|重点词汇|逐句解析'
+const TITLE_SPLIT_RE = new RegExp(`(${EXCLUDE_TITLES}|${ESSAY_TITLES})`, 'g')
+const LOCATE_RE = /^([\[「]?\d{1,3}[\]」]?\s*提到|句\s*[\[「]?\s*\d+|第\s*[\d一二三四五六七八九十百]+\s*(段|句|行|小题|题)|首段|末段|尾段|最后一段|上?一段|根据题干|定位[:：]?|由题干)/
+const OPTION_ITEM_RE = /^[A-D]\s*[)）]\s*项/
+const OPTION_ITEM_HINT_RE = /(故排除|故不选|未提及|不属于|与原文|与题干|无中生有|偷换|张冠李戴|曲解|断章取义|不是.*原因|并非)/
+const CORRECT_HINT_RE = /(故为答案|故是答案|故答案为|本题选[择答案]?|为正确答案|正确项)/
+
+/** 半角标点→全角（仅中文语境），并在中英文边界补一个空格 */
+function tidyPunctuation(s) {
+  let t = s
+  t = t.replace(new RegExp(`([${CJK}”』」》）】%]),(?=[${CJK}“『「（《【"A-D])`, 'g'), '$1，')
+  t = t.replace(new RegExp(`([${CJK}”』」》）】]);(?=[${CJK}“])`, 'g'), '$1；')
+  t = t.replace(new RegExp(`([${CJK}”』」》）】]):(?=[${CJK}“《【"])`, 'g'), '$1：')
+  t = t.replace(new RegExp(`([${CJK}])([A-Za-z])`, 'g'), '$1 $2')
+  t = t.replace(new RegExp(`([A-Za-z)%\\]])([${CJK}（“])`, 'g'), '$1 $2')
+  return t.replace(/\s{2,}/g, ' ').trim()
+}
+
+/** 去掉块尾粘连的下一题定位句（「…故排除。 定位根据题干中的关键词语 … 可定位至第N段/第N句。」） */
+function stripTrailingLocate(t) {
+  return t.replace(/[。；;]?\s*定位[:：]?\s*根据题干[^。]*。?\s*$/, '。').trim()
+}
+
+/** 截掉行尾粘连的长英文录音原文（Recording Three … / Conversation One …） */
+function stripRecordingTail(s) {
+  return s.replace(/。?\s+((Recording|Conversation|Passage|Section)\s+[A-Z][^\u4e00-\u9fa5]{25,})$/g, '。').trim()
+}
+
+/** 行尾残缺标点统一收成句号 */
+function fixTail(s) {
+  return s.replace(/[;；:：,，]\s*$/, '。')
+}
+
+/** 把按选项切开的列表项重新缝合：上一项以「、和，」结尾或只剩选项壳时并入下一项 */
+function mergeListItems(parts) {
+  const out = []
+  for (const p of parts) {
+    const prev = out[out.length - 1]
+    if (prev && !OPTION_ITEM_HINT_RE.test(prev) && !/[。！？!?]$/.test(prev)) {
+      out[out.length - 1] = `${prev}${p}`
+    } else {
+      out.push(p)
+    }
+  }
+  return out
+}
+
+function splitSentences(text) {
+  return text.split(/(?<=[。！？!?])/).map((s) => s.trim()).filter(Boolean)
+}
+
+/** 把一段解析文本整理成结构化块；无法整理时返回 null（调用方回退纯文本） */
+export function formatAnalysis(raw) {
+  const source = String(raw || '').replace(/\s+/g, ' ').trim()
+  if (!source) return null
+  const text = stripTrailingLocate(tidyPunctuation(source))
+  if (!text) return null
+
+  // 在结构标记词前断行，形成大段
+  const sections = text.replace(TITLE_SPLIT_RE, '\n$1').split('\n').map((s) => s.trim()).filter(Boolean)
+
+  const result = { locate: '', blocks: [] }
+  const pushExclusion = (line) => {
+    let last = result.blocks[result.blocks.length - 1]
+    if (!last || last.title !== '干扰项排除' || last.kind !== 'list') {
+      last = { title: '干扰项排除', kind: 'list', lines: [] }
+      result.blocks.push(last)
+    }
+    last.lines.push(line)
+  }
+  const pushPara = (line) => {
+    let last = result.blocks[result.blocks.length - 1]
+    if (!last || last.kind === 'list' || last.title || last.kind === 'correct') {
+      last = { title: '', kind: 'para', lines: [] }
+      result.blocks.push(last)
+    }
+    last.lines.push(line)
+  }
+
+  for (const section of sections) {
+    const titleMatch = section.match(new RegExp(`^(${EXCLUDE_TITLES}|${ESSAY_TITLES})[：:]?\\s*`))
+    const title = titleMatch ? titleMatch[1] : ''
+    const body = title ? section.slice(titleMatch[0].length).trim() : section
+
+    if (title) {
+      // 干扰项排除类标题 → 按选项拆成列表
+      if (new RegExp(`^(${EXCLUDE_TITLES})$`).test(title)) {
+        const parts = mergeListItems(
+          body.split(/(?=[A-D]\s*[)）]\s*项)/)
+            .map((x) => fixTail(stripRecordingTail(x.replace(/^[，,；\s]+|[，,；\s]+$/g, ''))))
+            .filter(Boolean)
+        )
+        const lines = parts.filter((p) => p.length >= 6)
+        if (lines.length) result.blocks.push({ title, kind: 'list', lines })
+        continue
+      }
+      const lines = splitSentences(body).map(fixTail).filter(Boolean)
+      if (lines.length) result.blocks.push({ title, kind: 'para', lines })
+      continue
+    }
+
+    // 无标题大段：按句归类（定位句 / 正确项 / 排除项 / 正文）
+    for (const rawSentence of splitSentences(body || section)) {
+      const sentence = fixTail(stripRecordingTail(rawSentence))
+      if (!sentence) continue
+      const isOptionExcl = OPTION_ITEM_RE.test(sentence) && OPTION_ITEM_HINT_RE.test(sentence)
+      if (!result.locate && result.blocks.length === 0 && LOCATE_RE.test(sentence)) {
+        result.locate = sentence
+      } else if (isOptionExcl) {
+        pushExclusion(sentence)
+      } else if (CORRECT_HINT_RE.test(sentence) && OPTION_ITEM_RE.test(sentence)) {
+        result.blocks.push({ title: '', kind: 'correct', lines: [sentence] })
+      } else if (sentence.length < 6) {
+        continue
+      } else {
+        pushPara(sentence)
+      }
+    }
+  }
+  // 全部为空时视为无法解析
+  const hasContent = result.locate || result.blocks.some((b) => b.lines.length)
+  return hasContent ? result : null
+}
