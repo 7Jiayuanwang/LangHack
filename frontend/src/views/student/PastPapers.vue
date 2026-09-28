@@ -262,6 +262,22 @@
             <p v-else class="analysis-missing">本题暂无解析{{ currentShared ? `，可展开下方${currentShared.label}` : '' }}</p>
           </div>
 
+          <details v-if="formattedAnalysis && formattedAnalysis.vocab" class="analysis-vocab" open>
+            <summary>
+              <span class="analysis-vocab-title">{{ formattedAnalysis.vocab.title }}</span>
+              <span class="analysis-vocab-count">{{ formattedAnalysis.vocab.entries.length }} 词</span>
+              <span class="analysis-vocab-hint">点击折叠</span>
+            </summary>
+            <ul class="analysis-vocab-list">
+              <li v-for="(word, wi) in formattedAnalysis.vocab.entries" :key="wi">
+                <span class="vocab-word">{{ word.word }}</span>
+                <span v-if="word.phonetic" class="vocab-phonetic">{{ word.phonetic }}</span>
+                <span v-if="word.pos" class="vocab-pos">{{ word.pos }}</span>
+                <span class="vocab-meaning">{{ word.meaning }}</span>
+              </li>
+            </ul>
+          </details>
+
           <details v-if="currentShared" class="analysis-fold analysis-source">
             <summary>{{ currentShared.label }}（点击展开）</summary>
             <p>{{ currentShared.text }}</p>
@@ -878,6 +894,26 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
 .analysis-fold p { white-space: pre-wrap; }
 .analysis-source { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; }
 .analysis-source p { max-height: 320px; overflow-y: auto; }
+.analysis-vocab { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; overflow: hidden; }
+.analysis-vocab > summary { display: flex; align-items: center; gap: 8px; padding: 9px 12px; cursor: pointer; list-style: none; font-size: 13px; background: #eef2ff; }
+.analysis-vocab > summary::-webkit-details-marker { display: none; }
+.analysis-vocab-title { font-weight: 700; color: #1e3a8a; }
+.analysis-vocab-title::before { content: '📖 '; }
+.analysis-vocab-count { font-size: 12px; color: #64748b; }
+.analysis-vocab-hint { margin-left: auto; font-size: 12px; color: #94a3b8; }
+.analysis-vocab-hint::before { content: '▾ '; }
+.analysis-vocab:not([open]) .analysis-vocab-hint::before { content: '▸ '; }
+.analysis-vocab-list { margin: 0; padding: 4px 12px 10px; list-style: none; }
+.analysis-vocab-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 0; border-bottom: 1px dashed #eef2f7; font-size: 13px; line-height: 1.65; }
+.analysis-vocab-list li:last-child { border-bottom: 0; }
+.vocab-word { font-weight: 700; color: #1d4ed8; }
+.vocab-phonetic { font-size: 12px; color: #64748b; }
+.vocab-pos { font-size: 12px; font-style: italic; color: #7c3aed; }
+.vocab-meaning { color: #334155; }
+@media (max-width: 640px) {
+  .analysis-vocab-list li { gap: 4px; }
+  .vocab-meaning { flex-basis: 100%; }
+}
 
 .writing-score { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .writing-score-btn { border: none; border-radius: 6px; padding: 9px 18px; background: var(--xy-brand-600, #2563eb); color: #fff; font-weight: 700; cursor: pointer; }

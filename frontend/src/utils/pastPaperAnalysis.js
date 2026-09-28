@@ -353,8 +353,17 @@ export function buildAnalysisIndex(paper) {
 
 const CJK = '一-鿿・'
 const EXCLUDE_TITLES = '干扰项排除|排除干扰项|干扰项分析|选项辨析|选项分析|错误选项分析'
-const ESSAY_TITLES = '审题思路|写作思路|写作要点|审题要点|参考范文|范文点评|范文解析|解题思路|要点解析|翻译要点|翻译点拨|句意分析|选项归类|答案详解|长难句分析|重点词汇|逐句解析'
-const TITLE_SPLIT_RE = new RegExp(`(${EXCLUDE_TITLES}|${ESSAY_TITLES})`, 'g')
+const ESSAY_TITLES = '审题思路|写作思路|写作要点|审题要点|参考范文|范文点评|范文解析|解题思路|要点解析|翻译要点|翻译点拨|句意分析|选项归类|答案详解|长难句分析|逐句解析'
+const VOCAB_TITLES = '核心词汇|重点词汇|高频词汇|必备词汇|词汇积累|词汇拓展|词汇点睛|生词'
+const TITLE_SPLIT_RE = new RegExp(`(${EXCLUDE_TITLES}|${ESSAY_TITLES}|${VOCAB_TITLES})`, 'g')
+const VOCAB_TITLE_RE = new RegExp(`(${VOCAB_TITLES})[：:]?\\s*`)
+/** 词汇段结束标志：下一个结构标题 / 套卷页眉 / 题号解析 */
+const VOCAB_END_RE = new RegExp(`(${EXCLUDE_TITLES}|${ESSAY_TITLES}|参考译文|全文翻译|答案与解析|定位根据题干|定位[:：]|解析[:：]|译文|\\d{4}\\s*年\\s*\\d{1,2}\\s*月|第\\s*\\d+\\s*套|\\d{1,3}\\s*[.．]\\s*答案)`)
+const VOCAB_POS = 'n|vt|vi|v|adj|adv|prep|pron|conj|num|int|art|aux|abbr|pl'
+/** 拉丁字母（含重音，如 cliché） */
+const LAT = 'A-Za-z\\u00C0-\\u024F'
+/** 中文里当"引子"的字（后面跟英文词说明该英文属于释义，不是新词条） */
+const VOCAB_MEANING_PREFIX = /[把将如见用称即作为于以和与及或]$/
 const LOCATE_RE = /^([\[「]?\d{1,3}[\]」]?\s*提到|句\s*[\[「]?\s*\d+|第\s*[\d一二三四五六七八九十百]+\s*(段|句|行|小题|题)|首段|末段|尾段|最后一段|上?一段|根据题干|定位[:：]?|由题干)/
 const OPTION_ITEM_RE = /^[A-D]\s*[)）]\s*项/
 const OPTION_ITEM_HINT_RE = /(故排除|故不选|未提及|不属于|与原文|与题干|无中生有|偷换|张冠李戴|曲解|断章取义|不是.*原因|并非)/
@@ -404,17 +413,95 @@ function splitSentences(text) {
   return text.split(/(?<=[。！？!?])/).map((s) => s.trim()).filter(Boolean)
 }
 
+/** 把词汇段拆成词条：[{ word, phonetic, pos, meaning }] */
+export function parseVocabEntries(seg) {
+  let s = String(seg || '').replace(/\s+/g, ' ').trim()
+  if (!s) return []
+  // 先保护 [音标]（也兼容「sni:k] 这类坏括号），避免在音标内部误断行
+  const ph = []
+  s = s.replace(/(?:\[|「)[^\]]{1,45}\]/g, (m) => {
+    ph.push(m)
+    return `\u0001${ph.length - 1}\u0002`
+  })
+  const restore = (t) => t.replace(/\u0001(\d+)\u0002/g, (_, i) => ph[Number(i)] || '')
+  const headRe = new RegExp(`^[${LAT}][${LAT}'’\\-]*(?:\\s+[${LAT}'’\\.\\-]{1,12}){0,4}`)
+
+  // 在新词条首字母前断行：前面是中文/右括号/音标，且紧跟音标或词性（或释义直接是中文）
+  const broken = s.replace(/([^\x00-\x7F]|\)|）|\]|」|,|;|；)\s*(?=[A-Za-z\u00C0-\u024F])/g, (m, prev, off, str) => {
+    const after = str.slice(off + m.length)
+    const head = after.match(headRe)
+    if (!head) return m
+    const tail = after.slice(head[0].length)
+    const strong = new RegExp(`^\\s*(?:\\u0001\\d+\\u0002|(?:${VOCAB_POS})\\b\\.?)`).test(tail)
+    if (strong) return `${prev}\n`
+    const cjkPrev = !/[)）\]」,;；]/.test(prev)
+    const weak = cjkPrev && /^\s*[\u4e00-\u9fff…·]/.test(tail)
+    if (!weak) return m
+    // 「把 buffer zone 视为」这类：引子字后面的英文属于释义，不是新词条
+    if (VOCAB_MEANING_PREFIX.test(str.slice(0, off + prev.length))) return m
+    return `${prev}\n`
+  })
+  const entryRe = new RegExp(`^([${LAT}][${LAT}'’\\-]*(?:\\s+[${LAT}'’\\.\\-]{1,12}){0,4})\\s*((?:\\[|「)[^\\]]{1,45}\\])?\\s*((?:${VOCAB_POS})\\b\\.?)?\\s*([\\s\\S]*)$`)
+  const out = []
+  for (const rawLine of broken.split('\n')) {
+    const line = restore(rawLine.trim())
+    if (!line) continue
+    const m = line.match(entryRe)
+    if (!m) continue
+    const word = (m[1] || '').trim()
+    const phonetic = (m[2] || '').replace(/^「/, '[').trim()
+    const pos = (m[3] || '').trim()
+    const meaning = (m[4] || '').replace(/^[，,;；、.…·\s]+/, '').trim()
+    if (word.length < 2) continue
+    if (!phonetic && !pos && cjkCount(meaning) < 1) continue
+    out.push({ word, phonetic, pos, meaning })
+  }
+  return out
+}
+
 /** 把一段解析文本整理成结构化块；无法整理时返回 null（调用方回退纯文本） */
 export function formatAnalysis(raw) {
   const source = String(raw || '').replace(/\s+/g, ' ').trim()
   if (!source) return null
-  const text = stripTrailingLocate(tidyPunctuation(source))
+  let text = stripTrailingLocate(tidyPunctuation(source))
   if (!text) return null
+
+  const result = { locate: '', blocks: [], vocab: null }
+
+  // 先把「核心词汇」段整段剥离，单独成块（不再混在解析正文里）。
+  // 有的解析里词汇标题会出现多次（前面是空标题），全部扫描并合并词条。
+  const vocabAllRe = new RegExp(`(${VOCAB_TITLES})[：:]?\\s*`, 'g')
+  const spans = []
+  const entries = []
+  const seen = new Set()
+  let vocabTitle = ''
+  let vm
+  while ((vm = vocabAllRe.exec(text))) {
+    const rest = text.slice(vm.index + vm[0].length)
+    const endMatch = rest.match(VOCAB_END_RE)
+    const seg = endMatch ? rest.slice(0, endMatch.index) : rest
+    const list = parseVocabEntries(seg)
+    if (list.length < 2) continue
+    if (!vocabTitle) vocabTitle = vm[1]
+    spans.push([vm.index, endMatch ? vm.index + vm[0].length + endMatch.index : text.length])
+    for (const e of list) {
+      const key = e.word.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      entries.push(e)
+    }
+  }
+  if (spans.length) {
+    let kept = text
+    for (const [s0, e0] of spans.reverse()) kept = `${kept.slice(0, s0)} ${kept.slice(e0)}`
+    text = kept.trim()
+    result.vocab = { title: vocabTitle, entries }
+  }
+  if (!text && !result.vocab) return null
 
   // 在结构标记词前断行，形成大段
   const sections = text.replace(TITLE_SPLIT_RE, '\n$1').split('\n').map((s) => s.trim()).filter(Boolean)
 
-  const result = { locate: '', blocks: [] }
   const pushExclusion = (line) => {
     let last = result.blocks[result.blocks.length - 1]
     if (!last || last.title !== '干扰项排除' || last.kind !== 'list') {
@@ -433,7 +520,7 @@ export function formatAnalysis(raw) {
   }
 
   for (const section of sections) {
-    const titleMatch = section.match(new RegExp(`^(${EXCLUDE_TITLES}|${ESSAY_TITLES})[：:]?\\s*`))
+    const titleMatch = section.match(new RegExp(`^(${EXCLUDE_TITLES}|${ESSAY_TITLES}|${VOCAB_TITLES})[：:]?\\s*`))
     const title = titleMatch ? titleMatch[1] : ''
     const body = title ? section.slice(titleMatch[0].length).trim() : section
 
@@ -473,6 +560,7 @@ export function formatAnalysis(raw) {
     }
   }
   // 全部为空时视为无法解析
-  const hasContent = result.locate || result.blocks.some((b) => b.lines.length)
+  const hasContent =
+    result.locate || result.blocks.some((b) => b.lines.length) || (result.vocab && result.vocab.entries.length)
   return hasContent ? result : null
 }
