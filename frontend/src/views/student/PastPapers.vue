@@ -8,6 +8,13 @@
         <h1>{{ activePaper ? activePaper.title : '历年真题' }}</h1>
         <p>{{ activePaper ? `${answeredCount}/${activePaper.questions.length} 题已作答` : '练习、交卷并查看逐题解析' }}</p>
       </div>
+      <span
+        v-if="activePaper"
+        :class="['mode-badge', examMode, { danger: examMode === 'exam' && remainingSeconds <= 300 }]"
+      >
+        <template v-if="examMode === 'exam'">⏱ 剩余 {{ remainingTimeText }}</template>
+        <template v-else>📖 学习模式</template>
+      </span>
       <button v-if="!activePaper && canManagePapers" class="import-button" type="button" @click="importVisible = true">
         <el-icon><Upload /></el-icon>
         导入
@@ -54,7 +61,7 @@
             <button v-if="paper.serverManaged && canManagePapers" class="delete-button" type="button" aria-label="删除共享试卷" @click="removePaper(paper)">
               <el-icon><Delete /></el-icon>
             </button>
-            <button class="start-button" type="button" :disabled="paper.status !== 'ready'" @click="startPaper(paper)">
+            <button class="start-button" type="button" :disabled="paper.status !== 'ready'" @click="openModeDialog(paper)">
               {{ getSavedResult(paper.id) ? '再次练习' : '开始做题' }}
               <el-icon><ArrowRight /></el-icon>
             </button>
@@ -139,7 +146,7 @@
             :key="option"
             type="button"
             :class="optionClass(index)"
-            :disabled="submitted"
+            :disabled="answerLocked"
             @click="selectAnswer(index)"
           >
             <span class="option-letter">{{ optionLetter(index) }}</span>
@@ -150,7 +157,7 @@
         <div v-else-if="questionType === 'cloze'" class="structured-answers">
           <label v-for="(_, index) in currentQuestion.answers" :key="index">
             第 {{ index + 1 }} 空
-            <select :value="answerValue?.[index] ?? ''" :disabled="submitted" @change="setArrayAnswer(index, $event.target.value)">
+            <select :value="answerValue?.[index] ?? ''" :disabled="answerLocked" @change="setArrayAnswer(index, $event.target.value)">
               <option value="">请选择</option>
               <option v-for="(option, optionIndex) in currentQuestion.options" :key="optionIndex" :value="optionIndex">{{ optionLetter(optionIndex) }}. {{ option }}</option>
             </select>
@@ -160,7 +167,7 @@
         <div v-else-if="questionType === 'matching'" class="structured-answers matching-answers">
           <label v-for="item in currentQuestion.items" :key="item.id">
             <span>{{ item.prompt }}</span>
-            <select :value="answerValue?.[item.id] ?? ''" :disabled="submitted" @change="setMatchingAnswer(item.id, $event.target.value)">
+            <select :value="answerValue?.[item.id] ?? ''" :disabled="answerLocked" @change="setMatchingAnswer(item.id, $event.target.value)">
               <option value="">请选择对应段落</option>
               <option v-for="(option, optionIndex) in currentQuestion.options" :key="optionIndex" :value="optionIndex">{{ optionLetter(optionIndex) }}</option>
             </select>
@@ -171,7 +178,7 @@
           v-else
           class="subjective-answer"
           :value="answerValue || ''"
-          :disabled="submitted"
+          :disabled="answerLocked"
           :placeholder="questionType === 'writing' ? '在这里完成作文' : '在这里输入译文'"
           @input="setTextAnswer($event.target.value)"
         ></textarea>
@@ -209,7 +216,7 @@
           </div>
         </div>
 
-        <div v-if="submitted" class="analysis-panel">
+        <div v-if="showAnswers" class="analysis-panel">
           <div class="analysis-title">
             <template v-if="isSubjective(currentQuestion)">参考答案与评分要点</template>
             <template v-else>
@@ -287,17 +294,44 @@
       </div>
 
       <footer class="exam-actions">
-        <button type="button" class="secondary-button" :disabled="currentIndex === 0" @click="currentIndex--">上一题</button>
-        <button v-if="currentIndex < activePaper.questions.length - 1" type="button" class="primary-button" @click="currentIndex++">下一题</button>
-        <button v-else-if="!submitted" type="button" class="primary-button" :disabled="answeredCount === 0 || submitting" @click="submitPaper">{{ submitting ? '保存中...' : '交卷' }}</button>
-        <button v-else type="button" class="primary-button" @click="leavePaper">查看试卷列表</button>
+        <div class="actions-group">
+          <button type="button" class="secondary-button" :disabled="currentIndex === 0" @click="currentIndex--">上一题</button>
+          <button v-if="examMode === 'study' && !submitted" type="button" class="secondary-button reveal-button" @click="revealed = !revealed">
+            {{ revealed ? '收起解析' : '查看解析' }}
+          </button>
+        </div>
+        <div class="actions-group">
+          <button v-if="currentIndex < activePaper.questions.length - 1" type="button" class="primary-button" @click="currentIndex++">下一题</button>
+          <button v-else-if="!submitted && !timeUp" type="button" class="primary-button" :disabled="answeredCount === 0 || submitting" @click="submitPaper">{{ submitting ? '保存中...' : '交卷' }}</button>
+          <button v-else type="button" class="primary-button" @click="leavePaper">查看试卷列表</button>
+        </div>
       </footer>
 
-      <div v-if="submitted" class="score-bar" aria-live="polite">
+      <div v-if="submitted || timeUp" class="score-bar" aria-live="polite">
         客观题得分 <strong>{{ score }}/{{ objectiveCount }}</strong>
         <span v-if="subjectiveCount"> · {{ subjectiveCount }} 道主观题请对照参考答案自评</span>
       </div>
     </main>
+
+    <div v-if="modeDialogVisible" class="mode-overlay" @click.self="closeModeDialog">
+      <div class="mode-dialog" role="dialog" aria-modal="true" aria-label="选择做题模式">
+        <button class="mode-close" type="button" aria-label="关闭" @click="closeModeDialog">✕</button>
+        <h3>选择做题方式</h3>
+        <p class="mode-sub">{{ pendingPaper?.title }}</p>
+        <div class="mode-options">
+          <button class="mode-option study" type="button" @click="startPaper(pendingPaper, 'study')">
+            <span class="mode-icon">📖</span>
+            <span class="mode-name">学习模式</span>
+            <span class="mode-desc">不计时，可边做边查看解析</span>
+          </button>
+          <button class="mode-option exam" type="button" @click="startPaper(pendingPaper, 'exam')">
+            <span class="mode-icon">⏱️</span>
+            <span class="mode-name">测试模式</span>
+            <span class="mode-desc">限时 {{ pendingPaper?.duration || 120 }} 分钟，时间到自动交卷并禁止继续作答</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <PastPaperImportDialog v-model="importVisible" @imported="loadImportedPapers" />
   </div>
@@ -460,6 +494,7 @@ onBeforeUnmount(() => {
   }
   window.removeEventListener('pointermove', onResize)
   window.removeEventListener('pointerup', stopResize)
+  stopTimer()
 })
 
 const currentCategory = computed(() => examCategories.find(item => item.key === selectedCategory.value))
@@ -576,6 +611,10 @@ const progress = computed(() => activePaper.value ? (answeredCount.value / activ
 const objectiveCount = computed(() => activePaper.value?.questions.filter(question => !isSubjective(question)).length || 0)
 const subjectiveCount = computed(() => (activePaper.value?.questions.length || 0) - objectiveCount.value)
 const score = computed(() => activePaper.value?.questions.reduce((total, question) => total + (!isSubjective(question) && isCorrect(question) ? 1 : 0), 0) || 0)
+// 锁题：交卷后或测试模式时间到后禁止作答
+const answerLocked = computed(() => submitted.value || timeUp.value)
+// 解析与答案高亮：交卷后、时间到后始终显示；学习模式可主动展开（切题后自动收起）
+const showAnswers = computed(() => submitted.value || revealed.value || timeUp.value)
 
 function readSavedResults() {
   try {
@@ -613,8 +652,43 @@ async function removePaper(paper) {
   }
 }
 
-function startPaper(paper) {
+// ===== 学习模式 / 测试模式 =====
+// 学习模式：不计时，可边做边展开解析；测试模式：按试卷时长倒计时，时间到自动交卷并锁题
+const modeDialogVisible = ref(false)
+const pendingPaper = ref(null)
+const examMode = ref('study')
+const remainingSeconds = ref(0)
+const timeUp = ref(false)
+const revealed = ref(false)
+let timerId = null
+
+const remainingTimeText = computed(() => {
+  const total = Math.max(0, remainingSeconds.value)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const mm = String(m).padStart(2, '0')
+  const ss = String(s).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+})
+
+function openModeDialog(paper) {
   if (paper.status !== 'ready') return
+  pendingPaper.value = paper
+  modeDialogVisible.value = true
+}
+
+function closeModeDialog() {
+  modeDialogVisible.value = false
+  pendingPaper.value = null
+}
+
+function startPaper(paper, mode = 'study') {
+  if (!paper || paper.status !== 'ready') return
+  stopTimer()
+  examMode.value = mode
+  timeUp.value = false
+  revealed.value = false
   activePaper.value = paper
   currentIndex.value = 0
   answers.value = {}
@@ -624,6 +698,45 @@ function startPaper(paper) {
   lpCurrent.value = 0
   lpDuration.value = 0
   resetWritingScore()
+  closeModeDialog()
+  if (mode === 'exam') {
+    remainingSeconds.value = Math.max(60, Number(paper.duration || 120) * 60)
+    timerId = window.setInterval(onTimerTick, 1000)
+  } else {
+    remainingSeconds.value = 0
+  }
+}
+
+function onTimerTick() {
+  if (examMode.value !== 'exam' || submitted.value || timeUp.value) {
+    stopTimer()
+    return
+  }
+  remainingSeconds.value -= 1
+  if (remainingSeconds.value <= 0) {
+    remainingSeconds.value = 0
+    stopTimer()
+    handleTimeUp()
+  }
+}
+
+function stopTimer() {
+  if (timerId) {
+    clearInterval(timerId)
+    timerId = null
+  }
+}
+
+async function handleTimeUp() {
+  timeUp.value = true
+  // 停止正在播放的听力材料
+  if (audioElement.value) audioElement.value.pause()
+  if (answeredCount.value > 0) {
+    ElMessage.warning('考试时间到，系统已自动交卷，禁止继续作答')
+    await doSubmit()
+  } else {
+    ElMessage.warning('考试时间到，本次测试结束，禁止继续作答')
+  }
 }
 
 function syncPlaybackRate() {
@@ -659,6 +772,8 @@ watch(() => [currentQuestion.value?.passage, currentQuestion.value?.stem, curren
 watch([currentIndex, activePaper, isListeningQuestion], async () => {
   await nextTick()
   resetWritingScore()
+  // 学习模式下切题后自动收起上一题的解析，重新作答
+  revealed.value = false
   // 切换题目时，若当前不是听力题则自动暂停并停止播放，避免录音继续响
   if (!isListeningQuestion.value && audioElement.value) {
     audioElement.value.pause()
@@ -719,8 +834,8 @@ function optionClass(index) {
   return {
     'option-button': true,
     selected,
-    correct: submitted.value && index === currentQuestion.value.answer,
-    wrong: submitted.value && selected && index !== currentQuestion.value.answer
+    correct: showAnswers.value && index === currentQuestion.value.answer,
+    wrong: showAnswers.value && selected && index !== currentQuestion.value.answer
   }
 }
 
@@ -735,6 +850,11 @@ async function submitPaper() {
       return
     }
   }
+  await doSubmit()
+}
+
+async function doSubmit() {
+  if (submitted.value || submitting.value || !activePaper.value) return
   submitting.value = true
   try {
     await submitPastPaperAttempt({
@@ -750,6 +870,8 @@ async function submitPaper() {
       answers: answers.value
     })
     submitted.value = true
+    stopTimer()
+    revealed.value = false
     savedResults.value = {
       ...savedResults.value,
       [activePaper.value.id]: { score: score.value, total: objectiveCount.value, subjectiveCount: subjectiveCount.value, submittedAt: Date.now() }
@@ -776,9 +898,12 @@ async function leavePaper() {
       return
     }
   }
+  stopTimer()
   activePaper.value = null
   answers.value = {}
   submitted.value = false
+  timeUp.value = false
+  revealed.value = false
 }
 
 onMounted(loadImportedPapers)
@@ -790,6 +915,30 @@ onMounted(loadImportedPapers)
 .papers-header h1 { margin: 0; font-size: 22px; line-height: 1.3; }
 .papers-header p { margin: 3px 0 0; color: #6b7280; font-size: 13px; }
 .import-button { margin-left: auto; min-height: 40px; padding: 0 14px; border: 1px solid var(--xy-brand-700); border-radius: 6px; background: #fff; color: var(--xy-brand-700); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.mode-badge { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.mode-badge.study { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.mode-badge.exam { background: #eff6ff; color: var(--xy-brand-700); border: 1px solid #bfdbfe; font-variant-numeric: tabular-nums; }
+.mode-badge.exam.danger { background: #fef2f2; color: #dc2626; border-color: #fecaca; animation: mode-pulse 1s ease-in-out infinite; }
+@keyframes mode-pulse { 50% { opacity: .6; } }
+.mode-overlay { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; background: rgba(15, 23, 42, .55); padding: 16px; }
+.mode-dialog { position: relative; width: 100%; max-width: 560px; background: #fff; border-radius: 12px; padding: 26px 24px 24px; box-shadow: 0 20px 50px rgba(15, 23, 42, .3); }
+.mode-dialog h3 { margin: 0; font-size: 20px; text-align: center; }
+.mode-sub { margin: 6px 0 18px; text-align: center; color: #64748b; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mode-close { position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; font-size: 16px; cursor: pointer; }
+.mode-close:hover { background: #f1f5f9; color: #334155; }
+.mode-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mode-option { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 14px 18px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; cursor: pointer; text-align: center; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.mode-option:hover { border-color: var(--xy-brand-700); box-shadow: 0 6px 18px rgba(29, 78, 216, .14); transform: translateY(-2px); }
+.mode-option.study:hover { border-color: #059669; box-shadow: 0 6px 18px rgba(5, 150, 105, .14); }
+.mode-icon { font-size: 30px; line-height: 1; }
+.mode-name { font-size: 16px; font-weight: 700; color: #1f2937; }
+.mode-option.study .mode-name { color: #047857; }
+.mode-option.exam .mode-name { color: var(--xy-brand-700); }
+.mode-desc { color: #64748b; font-size: 12px; line-height: 1.6; }
+@media (max-width: 560px) {
+  .mode-options { grid-template-columns: 1fr; }
+  .mode-badge { padding: 4px 10px; font-size: 12px; }
+}
 .icon-button { width: 40px; height: 40px; border: 0; background: transparent; display: grid; place-items: center; font-size: 20px; cursor: pointer; }
 .paper-library, .exam-area { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; padding-bottom: 100px; }
 .category-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px; background: #e9edf3; border-radius: 8px; max-width: 620px; margin: 0 auto 18px; }
@@ -939,6 +1088,8 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
   .writing-score-btn { flex: 1 1 100%; }
 }
 .exam-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.actions-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.reveal-button { border-color: #a7f3d0; color: #047857; background: #ecfdf5; }
 .score-bar { margin-top: 12px; text-align: center; color: #334155; }
 .score-bar strong { color: var(--xy-brand-700); font-size: 20px; }
 @media (max-width: 560px) {
@@ -950,6 +1101,9 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
   .paper-actions .start-button { flex: 1; }
   .question-card { padding: 16px; }
   .structured-answers label { grid-template-columns: 1fr; }
+  .exam-actions { flex-direction: column-reverse; }
+  .actions-group { width: 100%; }
+  .actions-group button { flex: 1; }
 }
 
 @media (max-width: 900px) {
