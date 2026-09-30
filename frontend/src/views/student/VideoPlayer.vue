@@ -1306,7 +1306,7 @@ onBeforeUnmount(() => {
 }
 .lang-btn.active {
   background: #ffffff;
-  color: #2563eb;
+  color: var(--xy-brand-600);
   box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
@@ -1560,8 +1560,8 @@ onBeforeUnmount(() => {
   padding: 1px 8px;
   border-radius: 10px;
   font-size: 12px;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 .title-row {
@@ -1676,7 +1676,7 @@ onBeforeUnmount(() => {
 .desc-toggle {
   background: none;
   border: none;
-  color: #1d4ed8;
+  color: var(--xy-brand-700);
   font-size: 12px;
   cursor: pointer;
   padding: 2px 0;
@@ -1713,7 +1713,7 @@ onBeforeUnmount(() => {
 
 .mode-btn.active {
   background: #ffffff;
-  color: #1d4ed8;
+  color: var(--xy-brand-700);
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
@@ -1803,7 +1803,7 @@ onBeforeUnmount(() => {
 
 .seg-btn.active {
   background: #ffffff;
-  color: #2563eb;
+  color: var(--xy-brand-600);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
@@ -1856,7 +1856,7 @@ onBeforeUnmount(() => {
 
 .display-btn.active {
   background: #ffffff;
-  color: #1d4ed8;
+  color: var(--xy-brand-700);
   font-weight: 600;
   box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
@@ -1905,14 +1905,14 @@ onBeforeUnmount(() => {
 }
 
 .subtitle-item:hover {
-  background: rgba(29,78,216,0.04);
-  border-left-color: rgba(29,78,216,0.3);
+  background: rgba(23, 110, 81,0.04);
+  border-left-color: rgba(23, 110, 81,0.3);
 }
 
 .subtitle-item.active {
-  background: linear-gradient(90deg, rgba(29,78,216,0.08) 0%, rgba(29,78,216,0.02) 100%);
-  border-left-color: #1d4ed8;
-  color: #1d4ed8;
+  background: linear-gradient(90deg, rgba(23, 110, 81,0.08) 0%, rgba(23, 110, 81,0.02) 100%);
+  border-left-color: var(--xy-brand-700);
+  color: var(--xy-brand-700);
   font-weight: 600;
 }
 
@@ -1931,7 +1931,7 @@ onBeforeUnmount(() => {
 
 .subtitle-item.active .subtitle-time {
   color: #ffffff;
-  background: #1d4ed8;
+  background: var(--xy-brand-700);
 }
 
 .subtitle-text {
@@ -1967,13 +1967,13 @@ onBeforeUnmount(() => {
 }
 
 .transcript-cue:hover {
-  color: #1d4ed8;
-  background: rgba(29,78,216,0.06);
+  color: var(--xy-brand-700);
+  background: rgba(23, 110, 81,0.06);
 }
 
 .transcript-cue.active {
-  color: #1d4ed8;
-  background: rgba(29,78,216,0.1);
+  color: var(--xy-brand-700);
+  background: rgba(23, 110, 81,0.1);
   font-weight: 600;
   border-radius: 4px;
   padding: 2px 4px;

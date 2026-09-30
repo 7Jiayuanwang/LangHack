@@ -197,16 +197,16 @@ function downloadFile(content, name, type) {
 .import-form input, .import-form select { width: 100%; min-height: 42px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; background: #fff; color: #1f2937; }
 .file-field input { padding: 7px; }
 .file-field small { color: #64748b; font-size: 12px; font-weight: 400; line-height: 1.5; }
-.template-button { justify-self: start; border: 0; background: transparent; color: #1d4ed8; padding: 0; font-weight: 600; cursor: pointer; }
+.template-button { justify-self: start; border: 0; background: transparent; color: var(--xy-brand-700); padding: 0; font-weight: 600; cursor: pointer; }
 .template-actions { display: flex; flex-wrap: wrap; gap: 14px; }
 .preview-list { margin-top: 16px; display: grid; gap: 8px; max-height: 220px; overflow-y: auto; }
 .preview-item { padding: 10px 12px; background: #f0fdf4; border-left: 3px solid #16a34a; display: grid; gap: 3px; }
 .preview-item.error { background: #fef2f2; border-color: #dc2626; }
 .preview-item span { color: #64748b; font-size: 12px; }
-.export-button { justify-self: start; border: 1px solid #93c5fd; border-radius: 5px; padding: 5px 9px; background: #eff6ff; color: #1d4ed8; font-size: 12px; cursor: pointer; }
-.batch-export { justify-self: start; border: 1px solid #2563eb; border-radius: 5px; padding: 7px 10px; background: #2563eb; color: #fff; font-size: 12px; cursor: pointer; }
+.export-button { justify-self: start; border: 1px solid #93c5fd; border-radius: 5px; padding: 5px 9px; background: var(--xy-brand-50); color: var(--xy-brand-700); font-size: 12px; cursor: pointer; }
+.batch-export { justify-self: start; border: 1px solid var(--xy-brand-600); border-radius: 5px; padding: 7px 10px; background: var(--xy-brand-600); color: #fff; font-size: 12px; cursor: pointer; }
 .secondary, .primary { min-height: 40px; padding: 0 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
 .secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; margin-right: 8px; }
-.primary { border: 1px solid #1d4ed8; background: #1d4ed8; color: #fff; }
+.primary { border: 1px solid var(--xy-brand-700); background: var(--xy-brand-700); color: #fff; }
 .primary:disabled { opacity: .45; cursor: not-allowed; }
 </style>

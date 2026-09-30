@@ -169,7 +169,7 @@ const retryLogin = () => {
 }
 
 .theme-error .header-area { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); }
-.theme-info .header-area { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); }
+.theme-info .header-area { background: linear-gradient(135deg, #3b82f6 0%, var(--xy-brand-700) 100%); }
 .theme-warning .header-area { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
 
 .decor-shapes {

@@ -1,9 +1,7 @@
 <template>
   <div class="vocabulary-container">
     <!-- 顶部概览 -->
-    <div class="page-header">
-      <p class="page-subtitle">温故而知新，掌握更多词汇</p>
-    </div>
+    <XyPageHeader class="vocabulary-intro" title="我的单词本" eyebrow="WORDS TO GROW" description="温故而知新，把遇见的词慢慢变成自己的。" variant="hero" />
 
     <!-- 统计卡片 - 移动端横向滚动 -->
     <div class="stats-cards">
@@ -357,6 +355,7 @@ import {
 } from '@/api/student'
 import { useUserStore } from '@/store/user'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const { isEnabled, load: loadFeatureToggles, isLoaded: toggleLoaded } = useFeatureToggles()
 
@@ -1114,9 +1113,10 @@ onBeforeUnmount(() => {
 
 .vocabulary-container {
   padding: 24px;
-  background-color: #f6f8fa;
+  background: var(--xy-gradient-page);
   min-height: 100vh;
 }
+.vocabulary-intro { margin-bottom: 24px; }
 
 /* Page Header */
 .page-header {
@@ -1165,13 +1165,14 @@ onBeforeUnmount(() => {
 }
 
 .stat-card {
-  background: white;
+  background: var(--xy-surface);
   padding: 20px;
-  border-radius: 20px;
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-md);
   display: flex;
   align-items: center;
   gap: 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+  box-shadow: var(--xy-shadow-card);
   transition: transform 0.3s;
 }
 

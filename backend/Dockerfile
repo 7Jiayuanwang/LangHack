@@ -39,7 +39,7 @@ ARG ALPINE_MIRROR=
 
 WORKDIR /app
 
-# 安装 curl（healthcheck）、tzdata（时区）、mysql-client + mariadb-connector-c（mysqldump 备份/恢复）
+# 安装 curl（healthcheck）、tzdata（时区）、离线文章朗读引擎，以及数据库备份工具
 RUN ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2) \
     && if [ -n "$ALPINE_MIRROR" ]; then \
         printf '%s\n' "${ALPINE_MIRROR%/}/v${ALPINE_VER}/main" "${ALPINE_MIRROR%/}/v${ALPINE_VER}/community" > /etc/apk/repositories; \
@@ -55,6 +55,7 @@ RUN ALPINE_VER=$(cat /etc/alpine-release | cut -d. -f1-2) \
     && apk add --no-cache \
         curl \
         tzdata \
+        espeak-ng \
         docker-cli \
         mysql-client \
         mariadb-connector-c \

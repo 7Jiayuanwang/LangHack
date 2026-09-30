@@ -1,11 +1,12 @@
 <template>
   <div class="classes-management">
+    <XyPageHeader class="classes-intro" title="班级管理" eyebrow="YOUR CLASSES" description="了解班级规模与学习情况，集中处理日常教学事务。" variant="compact" />
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>班级管理</span>
+          <span>班级列表</span>
           <div>
-            <el-button type="success" :loading="syncing" @click="syncSchoolClasses">同步学校班级</el-button>
+            <el-button type="primary" plain :loading="syncing" @click="syncSchoolClasses">同步学校班级</el-button>
           </div>
         </div>
       </template>
@@ -13,7 +14,13 @@
       <!-- 班级列表 -->
       <div class="table-wrapper">
       <el-table :data="classes" stripe>
-        <el-table-column prop="name" label="班级名称" min-width="150" />
+        <el-table-column label="班级名称" min-width="150">
+          <template #default="scope">
+            <el-button link type="primary" @click="openClassOverview(scope.row)">
+              {{ scope.row.name }}
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="课序号" min-width="150">
           <template #default="scope">
             {{ scope.row.courseSequence || '-' }}
@@ -35,9 +42,12 @@
             {{ formatTime(scope.row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="290" fixed="right">
           <template #default="scope">
             <div class="action-buttons">
+              <el-button size="small" type="primary" plain @click="openClassOverview(scope.row)">
+                学情
+              </el-button>
               <el-button 
                 size="small" 
                 type="primary" 
@@ -202,9 +212,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { User, Download, MoreFilled, Edit, Delete, Plus } from '@element-plus/icons-vue'
 import { getAuthHeader } from '@/utils/auth'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
+
+const router = useRouter()
 
 // 响应式数据
 const classes = ref([])
@@ -249,6 +263,10 @@ const classRules = {
   courseId: [
     { required: true, message: '请选择课程', trigger: 'change' }
   ]
+}
+
+const openClassOverview = (classItem) => {
+  router.push(`/teacher/classes/${classItem.id}`)
 }
 
 // 方法
@@ -788,8 +806,12 @@ onMounted(() => {
 
 <style scoped>
 .classes-management {
+  max-width: 1440px;
+  margin: 0 auto;
   padding: 20px;
 }
+.classes-intro { margin-bottom: 18px; }
+.classes-management :deep(.el-card) { border-radius: var(--xy-radius-md); }
 
 .table-wrapper {
   overflow-x: auto;
@@ -813,7 +835,7 @@ onMounted(() => {
   margin: 0;
   padding: 5px 12px;
   font-size: 13px;
-  border-radius: 4px;
+  border-radius: var(--xy-radius-sm);
   transition: all 0.2s ease;
 }
 

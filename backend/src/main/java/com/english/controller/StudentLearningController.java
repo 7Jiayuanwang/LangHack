@@ -24,16 +24,30 @@ import com.english.mapper.ArticleFavoriteMapper;
 import com.english.mapper.ArticleLikeMapper;
 import com.english.exception.BusinessException;
 import com.english.service.*;
+import com.english.service.articleaudio.ArticleAudioService;
+import com.english.service.articleaudio.ArticleInsightAudioService;
+import com.english.dto.learner.ArticleLearningInsightDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import com.english.util.TextEncodingRepair;
+import com.english.service.impl.ArticleInsightService;
 
 /**
  * 学生学习控制器
@@ -81,10 +95,19 @@ public class StudentLearningController {
     private TextLearningRecordMapper textLearningRecordMapper;
 
     @Autowired
+    private ArticleInsightService articleInsightService;
+
+    @Autowired
     private WordNetService wordNetService;
 
     @Autowired
     private ArticleVersionService articleVersionService;
+
+    @Autowired
+    private ArticleAudioService articleAudioService;
+
+    @Autowired
+    private ArticleInsightAudioService articleInsightAudioService;
 
     @Autowired
     private ClassService classService;
@@ -306,6 +329,162 @@ public class StudentLearningController {
         }
     }
 
+    /** Check whether the selected article version already has a reusable audio file. */
+    @GetMapping("/texts/{textId}/audio")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public Result<ArticleAudioService.AudioInfo> getArticleAudioStatus(
+            @PathVariable Long textId,
+            @RequestParam(defaultValue = "original") String version,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            return Result.success(articleAudioService.status(accessibleAudioText(textId, assignmentId, authentication), version));
+        } catch (BusinessException | IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        }
+    }
+
+    /** Generate once on demand; never calls the metered short-text TTS endpoint. */
+    @PostMapping("/texts/{textId}/audio")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public Result<ArticleAudioService.AudioInfo> generateArticleAudio(
+            @PathVariable Long textId,
+            @RequestParam(defaultValue = "original") String version,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            return Result.success(articleAudioService.generate(accessibleAudioText(textId, assignmentId, authentication), version));
+        } catch (BusinessException | IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("生成文章音频失败: textId={}, version={}", textId, version, e);
+            return Result.error("文章音频暂时无法生成，请稍后重试");
+        }
+    }
+
+    /** Audio is fetched with the user's JWT, so private articles stay private. */
+    @GetMapping("/texts/{textId}/audio/file")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT', 'TEACHER', 'ADMIN', 'OPS')")
+    public ResponseEntity<Resource> getArticleAudioFile(
+            @PathVariable Long textId,
+            @RequestParam(defaultValue = "original") String version,
+            @RequestParam String hash,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            Path file = articleAudioService.existingFile(
+                    accessibleAudioText(textId, assignmentId, authentication), version, hash);
+            if (file == null) return ResponseEntity.notFound().build();
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("audio/wav"))
+                    .cacheControl(CacheControl.maxAge(1, TimeUnit.DAYS).cachePrivate())
+                    .contentLength(Files.size(file))
+                    .body(new FileSystemResource(file));
+        } catch (BusinessException | IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        } catch (Exception e) {
+            logger.error("读取文章音频失败: textId={}, version={}", textId, version, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    /** The listening flow reuses Xiaoya's existing insight cache without marking reading complete. */
+    @GetMapping("/texts/{textId}/audio/insights")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> getListeningInsightAudioStatus(
+            @PathVariable Long textId,
+            @RequestParam(defaultValue = "original") String version,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            Long userId = getCurrentStudentId(authentication);
+            accessibleAudioText(textId, assignmentId, authentication);
+            ArticleLearningInsightDto insight = articleInsightService.getForListening(userId, textId, version);
+            return Result.success(listeningInsightAudioPayload(userId, textId, insight, false));
+        } catch (BusinessException | IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("读取听后知识点失败: textId={}", textId, e);
+            return Result.error("暂时无法读取知识点");
+        }
+    }
+
+    @PostMapping("/texts/{textId}/audio/insights")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public Result<Map<String, Object>> generateListeningInsightAudio(
+            @PathVariable Long textId,
+            @RequestParam(defaultValue = "original") String version,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            Long userId = getCurrentStudentId(authentication);
+            accessibleAudioText(textId, assignmentId, authentication);
+            ArticleLearningInsightDto insight = articleInsightService.getForListening(userId, textId, version);
+            return Result.success(listeningInsightAudioPayload(userId, textId, insight, true));
+        } catch (BusinessException | IllegalArgumentException e) {
+            return Result.error(e.getMessage());
+        } catch (Exception e) {
+            logger.error("生成听后知识点音频失败: textId={}", textId, e);
+            return Result.error("知识点音频暂时无法生成，请稍后重试");
+        }
+    }
+
+    @GetMapping("/texts/{textId}/audio/insights/file")
+    @PreAuthorize("hasAnyRole('USER', 'STUDENT')")
+    public ResponseEntity<Resource> getListeningInsightAudioFile(
+            @PathVariable Long textId,
+            @RequestParam(defaultValue = "original") String version,
+            @RequestParam String hash,
+            @RequestParam(required = false) Long assignmentId,
+            Authentication authentication) {
+        try {
+            Long userId = getCurrentStudentId(authentication);
+            accessibleAudioText(textId, assignmentId, authentication);
+            ArticleLearningInsightDto insight = articleInsightService.getForListening(userId, textId, version);
+            if (!"READY".equals(insight.getStatus())) return ResponseEntity.notFound().build();
+            Path file = articleInsightAudioService.existingFile(userId, textId, insight, hash);
+            if (file == null) return ResponseEntity.notFound().build();
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("audio/wav"))
+                    .cacheControl(CacheControl.maxAge(1, TimeUnit.DAYS).cachePrivate())
+                    .contentLength(Files.size(file))
+                    .body(new FileSystemResource(file));
+        } catch (BusinessException | IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("读取知识点音频文件失败: textId={}", textId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    private Map<String, Object> listeningInsightAudioPayload(Long userId, Long textId,
+                                                               ArticleLearningInsightDto insight,
+                                                               boolean generate) throws Exception {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("status", insight.getStatus());
+        payload.put("message", insight.getMessage());
+        payload.put("targetLevel", insight.getTargetLevel());
+        payload.put("points", insight.getPoints());
+        if ("READY".equals(insight.getStatus()) && insight.getPoints() != null && !insight.getPoints().isEmpty()) {
+            ArticleInsightAudioService.AudioInfo audio = generate
+                    ? articleInsightAudioService.generate(userId, textId, insight)
+                    : articleInsightAudioService.status(userId, textId, insight);
+            payload.put("audioReady", audio.ready());
+            payload.put("hash", audio.hash());
+        } else {
+            payload.put("audioReady", false);
+        }
+        return payload;
+    }
+
+    private Text accessibleAudioText(Long textId, Long assignmentId, Authentication authentication) {
+        Long studentId = getCurrentStudentId(authentication);
+        assertStudentCanRecord(studentId, textId, null, assignmentId);
+        Text article = textMapper.selectById(textId);
+        if (article == null) throw new BusinessException("课文不存在");
+        return article;
+    }
+
     /**
      * 获取相关文章推荐（基于相似度矩阵）
      */
@@ -345,6 +524,7 @@ public class StudentLearningController {
                     Long otherId = m.getTextId().equals(textId) ? m.getSimilarTextId() : m.getTextId();
                     Text t = textMap.get(otherId);
                     if (t != null) {
+                        TextEncodingRepair.repair(t);
                         Map<String, Object> item = new LinkedHashMap<>();
                         item.put("id", t.getId());
                         item.put("title", t.getTitle());
@@ -384,6 +564,7 @@ public class StudentLearningController {
                     Collections.shuffle(candidates);
                     List<Text> fallback = candidates.subList(0, Math.min(5, candidates.size()));
                     for (Text t : fallback) {
+                        TextEncodingRepair.repair(t);
                         Map<String, Object> item = new LinkedHashMap<>();
                         item.put("id", t.getId());
                         item.put("title", t.getTitle());
@@ -519,6 +700,7 @@ public class StudentLearningController {
             }
             logger.info("完成阅读课文调用: recordId={}, studentId={}", recordId, studentId);
             learningRecordsService.completeReadingSession(recordId);
+            articleInsightService.requestAfterCompletion(studentId, record.getTextId());
             return Result.success("阅读已完成");
         } catch (BusinessException e) {
             return Result.error(e.getMessage());
@@ -537,6 +719,7 @@ public class StudentLearningController {
     public Result<Map<String, Object>> markTextAsCompleted(
             @PathVariable Long textId,
             @RequestParam(required = false) Long assignmentId,
+            @RequestParam(required = false) String contentVersion,
             Authentication authentication) {
         try {
             Long studentId = getCurrentStudentId(authentication);
@@ -573,6 +756,7 @@ public class StudentLearningController {
                         ? java.time.Duration.between(record.getStartTime(), now).getSeconds() : 0;
                 record.setDurationSeconds((int) Math.min(duration, Integer.MAX_VALUE));
                 record.setUpdatedTime(now);
+                if (contentVersion != null && !contentVersion.isBlank()) record.setContentVersion(contentVersion);
                 textLearningRecordMapper.updateById(record);
             } else {
                 // 没有未完成记录，创建一条已完成的记录
@@ -586,12 +770,15 @@ public class StudentLearningController {
                 record.setDurationSeconds(0);
                 record.setCreatedTime(now);
                 record.setUpdatedTime(now);
+                record.setContentVersion(contentVersion);
                 textLearningRecordMapper.insert(record);
             }
 
             Map<String, Object> result = new HashMap<>();
             result.put("message", "课文已标记为完成");
             result.put("recordId", record.getId());
+
+            articleInsightService.requestAfterCompletion(studentId, textId);
 
             return Result.success(result);
         } catch (BusinessException e) {

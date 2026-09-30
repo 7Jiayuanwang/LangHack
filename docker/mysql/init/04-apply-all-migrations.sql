@@ -4327,7 +4327,7 @@ CREATE TABLE IF NOT EXISTS notification_reads (
 
 -- V46__text_unit_many_to_many.sql
 
--- 一篇文章可以归属多个单元；没有关联的文章仍可独立存在。
+-- Link texts to multiple units while keeping legacy texts.unit_id usable.
 CREATE TABLE IF NOT EXISTS text_units (
     text_id BIGINT NOT NULL,
     unit_id BIGINT NOT NULL,
@@ -4337,9 +4337,9 @@ CREATE TABLE IF NOT EXISTS text_units (
     INDEX idx_text_units_unit (unit_id, order_num),
     CONSTRAINT fk_text_units_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE,
     CONSTRAINT fk_text_units_unit FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章-单元多对多关联';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Text-unit associations';
 
--- 保留旧 unit_id 字段作为兼容主关联，首次升级时迁移到关联表。
+-- Backfill associations from the legacy texts.unit_id column.
 INSERT IGNORE INTO text_units (text_id, unit_id, order_num)
 SELECT id, unit_id, COALESCE(order_num, 0)
 FROM texts
@@ -4389,3 +4389,177 @@ CREATE TABLE IF NOT EXISTS sentence_favorites (
   CONSTRAINT fk_sentence_favorite_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_sentence_favorite_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户例句收藏';
+
+
+-- V53__assignment_templates.sql
+
+CREATE TABLE IF NOT EXISTS assignment_templates (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL COMMENT '模板名称',
+    description VARCHAR(500) DEFAULT NULL COMMENT '模板说明',
+    config_json TEXT NOT NULL COMMENT '作业配置 JSON，不包含班级和作业截止时间',
+    created_by BIGINT NOT NULL COMMENT '创建教师用户 ID',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    INDEX idx_assignment_templates_creator (created_by, deleted),
+    INDEX idx_assignment_templates_updated (updated_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='教师作业模板';
+
+
+-- V54__learning_agent_context.sql
+
+-- 学习伙伴智能体：用户主动目标、兴趣、偏好与可管理记忆。
+
+CREATE TABLE IF NOT EXISTS learner_agent_profiles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    current_level VARCHAR(30) DEFAULT NULL COMMENT 'BEGINNER/ELEMENTARY/INTERMEDIATE/UPPER_INTERMEDIATE/ADVANCED',
+    weekly_minutes INT DEFAULT NULL COMMENT '用户每周可投入的英语学习分钟数',
+    preferred_formats_json VARCHAR(500) DEFAULT NULL COMMENT 'JSON array: READING/VOCABULARY/QUIZ/WRITING/CONVERSATION/VIDEO',
+    encouragement_style VARCHAR(20) DEFAULT 'GENTLE' COMMENT 'GENTLE/DIRECT/CHALLENGE',
+    memory_consent TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否允许从会话和行为中提取长期记忆',
+    onboarding_completed TINYINT(1) NOT NULL DEFAULT 0,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_learner_agent_profile_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴智能体用户设置';
+
+CREATE TABLE IF NOT EXISTS learner_goals (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    goal_type VARCHAR(30) NOT NULL COMMENT 'CET4/CET6/POSTGRADUATE/ACADEMIC_READING/COURSE/GENERAL/OTHER',
+    title VARCHAR(100) NOT NULL,
+    priority INT NOT NULL DEFAULT 3 COMMENT '1-5，5为最高',
+    target_date DATE DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/PAUSED/COMPLETED',
+    source VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT 'USER/INFERRED',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_learner_goals_user_status (user_id, status),
+    INDEX idx_learner_goals_target_date (target_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴用户多目标';
+
+CREATE TABLE IF NOT EXISTS learner_interests (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    name VARCHAR(40) NOT NULL,
+    source VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT 'USER/INFERRED',
+    weight DECIMAL(5,4) NOT NULL DEFAULT 1.0000,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_learner_interests_user_name (user_id, name),
+    INDEX idx_learner_interests_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴用户兴趣';
+
+CREATE TABLE IF NOT EXISTS learner_memories (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    memory_key VARCHAR(80) NOT NULL,
+    memory_type VARCHAR(30) NOT NULL COMMENT 'PROFILE/PREFERENCE/HABIT/GOAL/DIFFICULTY',
+    content VARCHAR(500) NOT NULL,
+    confidence DECIMAL(5,4) NOT NULL DEFAULT 1.0000,
+    source VARCHAR(30) NOT NULL COMMENT 'ONBOARDING/USER_CONFIRMED/CONVERSATION/BEHAVIOR',
+    evidence_type VARCHAR(30) DEFAULT NULL,
+    evidence_id VARCHAR(100) DEFAULT NULL,
+    is_sensitive TINYINT(1) NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' COMMENT 'CANDIDATE/ACTIVE/REJECTED/EXPIRED',
+    expires_time DATETIME DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_learner_memories_user_key (user_id, memory_key),
+    INDEX idx_learner_memories_user_status (user_id, status),
+    INDEX idx_learner_memories_source (source)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户可查看和管理的学习伙伴长期记忆';
+
+
+-- V56__learner_review_tasks.sql
+
+CREATE TABLE IF NOT EXISTS learner_review_tasks (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '复习任务 ID',
+    user_id BIGINT NOT NULL COMMENT '学生用户 ID，关联 users.id',
+    text_id BIGINT NOT NULL COMMENT '平台文章 ID，关联 texts.id',
+    last_attempt_id BIGINT DEFAULT NULL COMMENT '最近一次答题 ID，关联 student_ai_quiz_attempts.id',
+    repeat_count INT NOT NULL DEFAULT 0 COMMENT '该文章累计答题次数',
+    last_correct INT NOT NULL DEFAULT 0 COMMENT '最近一次答对题数',
+    last_total INT NOT NULL DEFAULT 0 COMMENT '最近一次总题数',
+    last_attempt_time DATETIME DEFAULT NULL COMMENT '最近一次答题时间',
+    due_at DATETIME NOT NULL COMMENT '下次建议复习时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 正常，1 删除',
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_learner_review_user_text (user_id, text_id),
+    KEY idx_learner_review_user_due (user_id, deleted, due_at),
+    KEY idx_learner_review_last_attempt (last_attempt_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴平台文章复习计划';
+
+INSERT INTO learner_review_tasks
+    (user_id, text_id, last_attempt_id, repeat_count, last_correct, last_total,
+     last_attempt_time, due_at)
+SELECT recent.student_id, recent.text_id, recent.id, recent.attempt_count,
+       recent.correct_count, recent.total_questions, recent.submitted_time,
+       DATE_ADD(
+           DATE_ADD(DATE(recent.submitted_time),
+               INTERVAL (CASE
+                   WHEN recent.correct_count * 100 < recent.total_questions * 80 THEN 1
+                   WHEN recent.attempt_count = 1 THEN 3
+                   ELSE 7
+               END) DAY),
+           INTERVAL 7 HOUR)
+FROM (
+    SELECT attempts.*,
+           ROW_NUMBER() OVER (
+               PARTITION BY attempts.student_id, attempts.text_id
+               ORDER BY attempts.submitted_time DESC, attempts.id DESC
+           ) AS rn,
+           COUNT(*) OVER (
+               PARTITION BY attempts.student_id, attempts.text_id
+           ) AS attempt_count
+    FROM student_ai_quiz_attempts attempts
+    WHERE attempts.total_questions > 0
+) recent
+WHERE recent.rn = 1
+ON DUPLICATE KEY UPDATE updated_time = updated_time;
+
+
+-- V57__article_learning_insights.sql
+
+CREATE TABLE IF NOT EXISTS article_learning_insights (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    text_id BIGINT NOT NULL,
+    content_version VARCHAR(24) NOT NULL,
+    target_level VARCHAR(20) NOT NULL,
+    content_hash CHAR(64) NOT NULL,
+    points_json TEXT NOT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_article_insight_cache (text_id, content_version, target_level, content_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS article_insight_messages (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    text_id BIGINT NOT NULL,
+    insight_id BIGINT NOT NULL,
+    read_time DATETIME DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_article_insight_delivery (user_id, insight_id),
+    KEY idx_article_insight_unread (user_id, read_time, created_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- V58__xiaoya_external_learning.sql
+
+CREATE TABLE IF NOT EXISTS xiaoya_external_learning (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    learning_day DATE NOT NULL,
+    source_type VARCHAR(12) NOT NULL,
+    source_title VARCHAR(120) DEFAULT NULL,
+    takeaway_en VARCHAR(500) NOT NULL,
+    takeaway_hash CHAR(64) NOT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_xiaoya_external_day_takeaway (user_id, learning_day, takeaway_hash),
+    KEY idx_xiaoya_external_user_day (user_id, learning_day, created_time),
+    CONSTRAINT fk_xiaoya_external_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

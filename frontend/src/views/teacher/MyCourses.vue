@@ -23,7 +23,10 @@
         <div class="card-body">
           <div class="info-row">
             <span class="info-label">教学班</span>
-            <span class="info-value">{{ item.className || '-' }}</span>
+            <el-button v-if="linkedClassId(item)" link type="primary" @click="openClassOverview(item)">
+              {{ item.className || item.classId }}
+            </el-button>
+            <span v-else class="info-value">{{ item.className || '-' }}</span>
           </div>
           <div class="info-row">
             <span class="info-label">选课人数</span>
@@ -38,6 +41,13 @@
             <span class="info-value">{{ item.classStatus }}</span>
           </div>
         </div>
+        <div class="card-actions">
+          <el-button v-if="linkedClassId(item)" type="primary" plain @click="openClassOverview(item)">查看班级学情</el-button>
+          <template v-else-if="!platformClassesLoading">
+            <span class="sync-hint">{{ platformClassesError ? '暂时无法检查平台班级关联' : '尚未同步到平台班级' }}</span>
+            <el-button @click="router.push('/teacher/classes')">前往班级管理</el-button>
+          </template>
+        </div>
       </div>
     </div>
   </div>
@@ -45,10 +55,15 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getMyTeachingClasses } from '@/api/teacher'
+import { useRouter } from 'vue-router'
+import { getMyTeachingClasses, getMyPlatformClasses } from '@/api/teacher'
 
+const router = useRouter()
 const loading = ref(false)
 const courses = ref([])
+const platformClasses = ref([])
+const platformClassesLoading = ref(false)
+const platformClassesError = ref(false)
 
 const now = new Date()
 const currentMonth = now.getMonth() + 1
@@ -83,8 +98,43 @@ async function loadData() {
   }
 }
 
+const linkedClassId = (course) => {
+  if (!course.classId) return null
+  return platformClasses.value.find(cls => cls.schoolClassId && String(cls.schoolClassId) === String(course.classId))?.id || null
+}
+
+const openClassOverview = (course) => {
+  const classId = linkedClassId(course)
+  if (classId) router.push(`/teacher/classes/${classId}`)
+}
+
+async function loadPlatformClasses() {
+  platformClassesLoading.value = true
+  platformClassesError.value = false
+  try {
+    const found = []
+    let page = 1
+    let pages = 1
+    do {
+      const res = await getMyPlatformClasses(page)
+      found.push(...(res?.data?.records || []))
+      const reportedPages = Number(res?.data?.pages) || 1
+      if (reportedPages > 20) platformClassesError.value = true
+      pages = Math.min(reportedPages, 20)
+      page += 1
+    } while (page <= pages)
+    platformClasses.value = found
+  } catch (e) {
+    platformClasses.value = []
+    platformClassesError.value = true
+  } finally {
+    platformClassesLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadData()
+  loadPlatformClasses()
 })
 </script>
 
@@ -148,4 +198,7 @@ onMounted(() => {
 .info-value {
   color: var(--text-secondary);
 }
+
+.card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--xy-border); }
+.sync-hint { color: var(--xy-ink-muted); font-size: 13px; }
 </style>

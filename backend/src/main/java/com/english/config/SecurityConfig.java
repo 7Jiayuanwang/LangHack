@@ -128,7 +128,7 @@ public class SecurityConfig {
                     .addHeaderWriter(new StaticHeadersWriter("Referrer-Policy", "strict-origin-when-cross-origin"))
                     .addHeaderWriter(new StaticHeadersWriter("X-XSS-Protection", "0"))
                     .addHeaderWriter(new StaticHeadersWriter("Content-Security-Policy",
-                        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self'"))
+                        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https: blob:; connect-src 'self'"))
                 .and()
                 .cors().configurationSource(corsConfigurationSource())
                 .and()
@@ -159,6 +159,7 @@ public class SecurityConfig {
                 .antMatchers("/api/admin/sync/**").hasAnyRole("ADMIN", "OPS")
                 // 数据指标：OPS 也可访问
                 .antMatchers("/api/admin/metrics/**").hasAnyRole("ADMIN", "OPS")
+                .antMatchers("/api/admin/task-plans/**").hasAnyRole("ADMIN", "OPS")
                 // 课文管理：教师也可访问（教师端上传课文功能）
                 .antMatchers("/api/admin/texts/**").hasAnyRole("ADMIN", "TEACHER")
                 .antMatchers("/api/admin/texts").hasAnyRole("ADMIN", "TEACHER")

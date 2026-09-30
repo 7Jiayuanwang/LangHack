@@ -25,7 +25,7 @@
     </main>
 
     <!-- 底部导航栏 -->
-    <nav class="mobile-nav" v-if="!effectiveHideNav">
+    <nav class="mobile-nav" v-if="!effectiveHideNav" :aria-label="`${role} 主导航`">
       <div class="nav-container">
         <router-link
           v-for="item in navItems"
@@ -190,10 +190,10 @@ const { toggles: featureToggles, load: loadFeatureToggles } = useFeatureToggles(
 // ── 主题（accent 颜色）────────────────────────────────────────────────────────
 
 const THEME = {
-  teacher: { accent: 'var(--secondary-color)', accentBg: 'rgba(78, 205, 196, 0.1)',  accentShadow: 'rgba(78, 205, 196, 0.3)'  },
-  user:    { accent: 'var(--info-color)',       accentBg: 'rgba(0, 122, 255, 0.1)',   accentShadow: 'rgba(0, 122, 255, 0.3)'   },
-  ops:     { accent: '#f97316',                 accentBg: 'rgba(249, 115, 22, 0.1)',  accentShadow: 'rgba(249, 115, 22, 0.3)'  },
-  admin:   { accent: 'var(--accent-color)',     accentBg: 'rgba(69, 183, 209, 0.1)',  accentShadow: 'rgba(69, 183, 209, 0.3)'  },
+  teacher: { accent: 'var(--xy-brand-600)', accentBg: 'var(--xy-brand-50)', accentShadow: 'rgba(23, 110, 81, 0.12)' },
+  user:    { accent: 'var(--xy-brand-600)', accentBg: 'var(--xy-brand-50)', accentShadow: 'rgba(23, 110, 81, 0.12)' },
+  ops:     { accent: 'var(--xy-brand-600)', accentBg: 'var(--xy-brand-50)', accentShadow: 'rgba(23, 110, 81, 0.12)' },
+  admin:   { accent: 'var(--xy-brand-600)', accentBg: 'var(--xy-brand-50)', accentShadow: 'rgba(23, 110, 81, 0.12)' },
 }
 
 const theme = computed(() => THEME[props.role])
@@ -277,6 +277,7 @@ const MORE_ITEMS = {
     { path: '/admin/class-cohort',      label: '班级画像', icon: DataLine,     featureKey: 'admin.class_cohort' },
     { path: '/admin/vocab-learning-stats', label: '生词本统计', icon: DataAnalysis },
     { path: '/admin/tag-management',    label: '标签管理', icon: EditPen,      featureKey: 'admin.tag_management' },
+    { path: '/admin/task-plans',        label: '默认任务', icon: Document },
   ],
 }
 
@@ -350,6 +351,7 @@ const ROUTE_MAP = {
     '/admin/vocab-learning-stats': '生词本学习统计',
     '/admin/tag-management':    '标签管理',
     '/admin/notifications':     '通知管理',
+    '/admin/task-plans':        '默认任务',
   },
 }
 
@@ -564,7 +566,8 @@ onUnmounted(() => {
   align-items: center;
   padding: 0 16px;
   height: 56px;
-  background: var(--surface-color);
+  background: var(--glass-bg);
+  backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--border-light);
   position: relative;
   z-index: 100;
@@ -576,24 +579,9 @@ onUnmounted(() => {
 .page-title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--xy-ink);
   margin: 0;
-  background: var(--gradient-secondary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* ops/admin 各自的标题渐变色 */
-.role-ops .page-title {
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-}
-.role-admin .page-title {
-  background: var(--gradient-accent);
-  -webkit-background-clip: text;
-  background-clip: text;
+  letter-spacing: -0.02em;
 }
 
 /* 主内容区域 */
@@ -627,9 +615,10 @@ onUnmounted(() => {
 
 /* 底部导航栏 */
 .mobile-nav {
-  background: var(--surface-color);
-  border-top: 1px solid var(--border-light);
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+  background: var(--glass-bg);
+  border-top: 1px solid var(--xy-border);
+  box-shadow: var(--xy-shadow-nav);
+  backdrop-filter: blur(18px);
   position: fixed;
   bottom: 0;
   left: 0;
@@ -640,9 +629,9 @@ onUnmounted(() => {
 
 /* ops 导航栏特殊样式（毛玻璃效果）*/
 .role-ops .mobile-nav {
-  background: linear-gradient(to top, var(--surface-color) 0%, rgba(255, 255, 255, 0.98) 100%);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(10px);
+  background: var(--glass-bg);
+  box-shadow: var(--xy-shadow-nav);
+  backdrop-filter: blur(18px);
   padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
 

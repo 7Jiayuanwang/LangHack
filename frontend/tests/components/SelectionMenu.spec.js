@@ -1,9 +1,15 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 import SelectionMenu from '@/components/SelectionMenu.vue'
 
 describe('SelectionMenu.vue', () => {
   const mountMenu = () => shallowMount(SelectionMenu, { props: { visible: true, position: { x: 200, y: 100 } } })
+  const desktopWidth = window.innerWidth
+
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: desktopWidth })
+    window.dispatchEvent(new Event('resize'))
+  })
 
   it('shows only underline and more trigger initially', () => {
     const wrapper = mountMenu()
@@ -59,5 +65,15 @@ describe('SelectionMenu.vue', () => {
     document.dispatchEvent(new Event('selectionchange'))
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('.menu-item')).toHaveLength(1)
+  })
+
+  it('shows direct touch actions on a narrow screen', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 })
+    const wrapper = mountMenu()
+    expect(wrapper.find('.selection-menu-mobile').exists()).toBe(true)
+    expect(wrapper.find('.more-trigger').exists()).toBe(false)
+    await wrapper.find('.selection-menu-mobile__ask').trigger('click')
+    expect(wrapper.emitted('ai-qa')).toHaveLength(1)
+    wrapper.unmount()
   })
 })

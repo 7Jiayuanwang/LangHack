@@ -224,12 +224,12 @@ h2 {
 
 .filter-section input:focus,
 .filter-section select:focus {
-  border-color: #409eff;
+  border-color: var(--xy-brand-600);
 }
 
 .refresh-btn {
   padding: 8px 20px;
-  background: #409eff;
+  background: var(--xy-brand-600);
   color: white;
   border: none;
   border-radius: 8px;

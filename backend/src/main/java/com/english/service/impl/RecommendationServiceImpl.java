@@ -252,6 +252,8 @@ public class RecommendationServiceImpl implements RecommendationService {
                 .eq(Text::getDeleted, 0)
                 .eq(Text::getIsFeatured, 1)
                 .gt(Text::getFeaturedPriority, 0)
+                .and(w -> w.isNull(Text::getUploadedBy)
+                        .or(u -> u.eq(Text::getIsPublic, 1).eq(Text::getStatus, "APPROVED")))
                 .notIn(!skipIds.isEmpty(), Text::getId, skipIds)
                 .orderByDesc(Text::getFeaturedPriority)
                 .orderByDesc(Text::getCreatedAt)
@@ -268,6 +270,8 @@ public class RecommendationServiceImpl implements RecommendationService {
         List<Text> byLevel = textService.lambdaQuery()
                 .eq(Text::getDeleted, 0)
                 .eq(preferredDifficulty != null, Text::getDifficulty, preferredDifficulty)
+                .and(w -> w.isNull(Text::getUploadedBy)
+                        .or(u -> u.eq(Text::getIsPublic, 1).eq(Text::getStatus, "APPROVED")))
                 .notIn(!skipIds.isEmpty(), Text::getId, skipIds)
                 .orderByDesc(Text::getCreatedAt)
                 .last("LIMIT " + need)
@@ -281,6 +285,8 @@ public class RecommendationServiceImpl implements RecommendationService {
         Set<Long> skipIds = mergeExclusions(excludeSet, accumulatedIds);
         List<Text> latest = textService.lambdaQuery()
                 .eq(Text::getDeleted, 0)
+                .and(w -> w.isNull(Text::getUploadedBy)
+                        .or(u -> u.eq(Text::getIsPublic, 1).eq(Text::getStatus, "APPROVED")))
                 .notIn(!skipIds.isEmpty(), Text::getId, skipIds)
                 .orderByDesc(Text::getCreatedAt)
                 .last("LIMIT " + need)
@@ -299,8 +305,17 @@ public class RecommendationServiceImpl implements RecommendationService {
     private List<Text> materializeInOrder(LinkedHashSet<Long> ids) {
         if (ids.isEmpty()) return Collections.emptyList();
         Map<Long, Text> byId = textService.listByIds(ids).stream()
+                .filter(this::isFeedEligible)
                 .collect(Collectors.toMap(Text::getId, t -> t));
         return ids.stream().map(byId::get).filter(Objects::nonNull).collect(Collectors.toList());
+    }
+
+    private boolean isFeedEligible(Text text) {
+        return text != null
+                && !Integer.valueOf(1).equals(text.getDeleted())
+                && (text.getUploadedBy() == null
+                    || (Integer.valueOf(1).equals(text.getIsPublic())
+                        && "APPROVED".equals(text.getStatus())));
     }
 
     // ── Persona reranking ──

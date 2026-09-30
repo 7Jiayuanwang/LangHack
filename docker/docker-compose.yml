@@ -215,8 +215,13 @@ services:
     environment:
       TZ: Asia/Shanghai
       SPRING_PROFILES_ACTIVE: sso
-      # Flyway — 禁用：历史迁移脚本有冲突，数据库变更手动执行
-      SPRING_FLYWAY_ENABLED: "false"
+      # Flyway — 已启用，已有数据库需先执行 scripts/init_flyway_history.sql
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_FLYWAY_LOCATIONS: classpath:db/migration
+      SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
+      SPRING_FLYWAY_BASELINE_VERSION: "0"
+      SPRING_FLYWAY_VALIDATE_ON_MIGRATE: "false"
+      SPRING_FLYWAY_OUT_OF_ORDER: "true"
       # 应用端口（容器内部）
       SERVER_PORT: ${SERVER_PORT:-8080}
       # 主库
@@ -266,6 +271,7 @@ services:
       GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
       # TTS 语音合成（硅基流动 CosyVoice2）
       TTS_API_KEY: ${TTS_API_KEY:-${AI_TRANSLATE_API_KEY:-}}
+      ARTICLE_AUDIO_STORAGE_DIR: ${ARTICLE_AUDIO_STORAGE_DIR:-/app/uploads/article-audio}
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
       # 零停机热更新（HotDeployController 启动 deployer sidecar 容器时需要）

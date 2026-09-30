@@ -5,6 +5,7 @@ import com.english.exception.BusinessException;
 import com.english.service.AiProviderService;
 import com.english.service.HiAgentService;
 import com.english.service.SystemConfigService;
+import com.english.util.AiAnswerSanitizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -47,6 +48,9 @@ import org.springframework.http.converter.StringHttpMessageConverter;
 @Slf4j
 @Service
 public class HiAgentServiceImpl implements HiAgentService {
+
+    /** Small preface buffer for removing merged planning text before streaming continues. */
+    private static final int STREAM_PREFACE_BUFFER_CHARS = 280;
 
     /** DB system_config group — HiAgent 凭证覆盖来源 */
     private static final String AI_CONFIG_GROUP = "ai_config";
@@ -567,6 +571,7 @@ public class HiAgentServiceImpl implements HiAgentService {
 
         org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody streamBody = outputStream -> {
             StringBuilder completeAnswer = new StringBuilder();
+            StringBuilder emittedAnswer = new StringBuilder();
             log.debug("Sending HiAgent Q&A streaming query for conversation {}", conversationId);
             Boolean completed = restTemplate.execute(
                     uri,
@@ -577,25 +582,30 @@ public class HiAgentServiceImpl implements HiAgentService {
                     },
                     response -> {
                         if (response.getStatusCode() != HttpStatus.OK) {
-                            Map<String, Object> error = new HashMap<>();
-                            error.put("message", "AI 问答服务暂时不可用，请稍后重试");
-                            writePlatformSseEvent(outputStream, "error", error);
-                            return false;
+                            throw new BusinessException("HiAgent QA HTTP " + response.getRawStatusCode());
                         }
 
-                        return forwardNormalizedSse(response.getBody(), outputStream, completeAnswer);
+                        return forwardNormalizedSse(response.getBody(), outputStream,
+                                completeAnswer, emittedAnswer);
                     });
 
             if (Boolean.TRUE.equals(completed)) {
                 try {
-                    if (completeAnswer.length() == 0) {
-                        Map<String, Object> error = new HashMap<>();
-                        error.put("message", "AI 问答服务未返回有效内容");
-                        writePlatformSseEvent(outputStream, "error", error);
-                        return;
+                    String learnerAnswer = AiAnswerSanitizer.sanitize(completeAnswer.toString());
+                    if (learnerAnswer == null || learnerAnswer.isBlank()) {
+                        throw new BusinessException("AI 问答服务未返回有效内容");
+                    }
+                    // Flush the final suffix in case the answer was shorter than the
+                    // preface buffer or the last upstream chunk arrived at completion.
+                    if (learnerAnswer.length() > emittedAnswer.length()) {
+                        Map<String, Object> delta = new HashMap<>();
+                        delta.put("content", learnerAnswer.substring(emittedAnswer.length()));
+                        writePlatformSseEvent(outputStream, "delta", delta);
+                        emittedAnswer.setLength(0);
+                        emittedAnswer.append(learnerAnswer);
                     }
                     if (completionHandler != null) {
-                        completionHandler.accept(completeAnswer.toString());
+                        completionHandler.accept(learnerAnswer);
                     }
                     Map<String, Object> done = new HashMap<>();
                     if (platformConversationId != null) {
@@ -623,7 +633,8 @@ public class HiAgentServiceImpl implements HiAgentService {
     private boolean forwardNormalizedSse(
             InputStream inputStream,
             OutputStream outputStream,
-            StringBuilder completeAnswer) throws IOException {
+            StringBuilder completeAnswer,
+            StringBuilder emittedAnswer) throws IOException {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String eventName = null;
@@ -635,7 +646,7 @@ public class HiAgentServiceImpl implements HiAgentService {
                 if (line.isEmpty()) {
                     if (data.length() > 0 && terminalResult == null) {
                         terminalResult = emitNormalizedEvent(
-                                eventName, data.toString(), outputStream, completeAnswer);
+                                eventName, data.toString(), outputStream, completeAnswer, emittedAnswer);
                     }
                     eventName = null;
                     data.setLength(0);
@@ -663,7 +674,7 @@ public class HiAgentServiceImpl implements HiAgentService {
 
             if (data.length() > 0 && terminalResult == null) {
                 terminalResult = emitNormalizedEvent(
-                        eventName, data.toString(), outputStream, completeAnswer);
+                        eventName, data.toString(), outputStream, completeAnswer, emittedAnswer);
             }
             return terminalResult == null || terminalResult;
         }
@@ -673,7 +684,8 @@ public class HiAgentServiceImpl implements HiAgentService {
             String sseEventName,
             String data,
             OutputStream outputStream,
-            StringBuilder completeAnswer)
+            StringBuilder completeAnswer,
+            StringBuilder emittedAnswer)
             throws IOException {
         if ("[DONE]".equals(data)) {
             return Boolean.TRUE;
@@ -687,14 +699,39 @@ public class HiAgentServiceImpl implements HiAgentService {
         }
 
         String upstreamEvent = sseEventName;
-        if ((upstreamEvent == null || upstreamEvent.isBlank()) && payload != null) {
-            upstreamEvent = payload.path("event").asText("");
+        String payloadEvent = payload == null ? "" : payload.path("event").asText("");
+        if ((upstreamEvent == null || upstreamEvent.isBlank()
+                || "message".equalsIgnoreCase(upstreamEvent)) && !payloadEvent.isBlank()) {
+            upstreamEvent = payloadEvent;
+        }
+        if (payload != null && payload.path("data").isObject()) {
+            String nestedEvent = payload.path("data").path("event").asText("");
+            if ((upstreamEvent == null || upstreamEvent.isBlank()
+                    || "message".equalsIgnoreCase(upstreamEvent)) && !nestedEvent.isBlank()) {
+                upstreamEvent = nestedEvent;
+            }
+        }
+
+        // Internal reasoning is useful for debugging, but must never be rendered as the learner answer.
+        if (isThinkingEvent(upstreamEvent)) {
+            return null;
+        }
+
+        // Some gateways use a generic message event but put reasoning in a
+        // dedicated field. Only an explicit answer is safe to render then.
+        if (payload != null && hasThinkingOnlyPayload(payload)) {
+            return null;
         }
 
         if ("message_end".equals(upstreamEvent) || "done".equals(upstreamEvent)) {
             return Boolean.TRUE;
         }
         if ("error".equals(upstreamEvent)) {
+            // Let the controller try a configured provider if no answer has reached the browser.
+            if (completeAnswer.length() == 0) {
+                throw new BusinessException("HiAgent QA stream error: "
+                        + extractFirstText(payload, "message", "error"));
+            }
             Map<String, Object> error = new HashMap<>();
             error.put("message", extractFirstText(payload, "message", "error"));
             writePlatformSseEvent(outputStream, "error", error);
@@ -709,11 +746,54 @@ public class HiAgentServiceImpl implements HiAgentService {
         }
         if (content != null && !content.isEmpty()) {
             completeAnswer.append(content);
-            Map<String, Object> delta = new HashMap<>();
-            delta.put("content", content);
-            writePlatformSseEvent(outputStream, "delta", delta);
+            emitAvailableStreamingAnswer(outputStream, completeAnswer, emittedAnswer);
         }
         return null;
+    }
+
+    private void emitAvailableStreamingAnswer(
+            OutputStream outputStream,
+            StringBuilder completeAnswer,
+            StringBuilder emittedAnswer) throws IOException {
+        if (completeAnswer.length() < STREAM_PREFACE_BUFFER_CHARS) {
+            return;
+        }
+        String sanitized = AiAnswerSanitizer.sanitize(completeAnswer.toString());
+        if (sanitized.length() <= emittedAnswer.length()) {
+            return;
+        }
+        Map<String, Object> delta = new HashMap<>();
+        delta.put("content", sanitized.substring(emittedAnswer.length()));
+        writePlatformSseEvent(outputStream, "delta", delta);
+        emittedAnswer.setLength(0);
+        emittedAnswer.append(sanitized);
+    }
+
+    private boolean isThinkingEvent(String eventName) {
+        if (eventName == null || eventName.isBlank()) {
+            return false;
+        }
+        String normalized = eventName.trim().toLowerCase(java.util.Locale.ROOT)
+                .replace('-', '_').replace(' ', '_');
+        return "thought".equals(normalized)
+                || "thinking".equals(normalized)
+                || "reasoning".equals(normalized)
+                || "deep_thinking".equals(normalized)
+                || "deepthinking".equals(normalized)
+                || "analysis".equals(normalized);
+    }
+
+    private boolean hasThinkingOnlyPayload(JsonNode payload) {
+        JsonNode candidate = payload;
+        if (payload.path("data").isObject()) {
+            candidate = payload.path("data");
+        }
+        boolean hasThinking = candidate.has("thought")
+                || candidate.has("thinking")
+                || candidate.has("reasoning")
+                || candidate.has("analysis");
+        boolean hasAnswer = candidate.has("answer") || candidate.has("Answer");
+        return hasThinking && !hasAnswer;
     }
 
     private String extractFirstText(JsonNode payload, String... fieldNames) {

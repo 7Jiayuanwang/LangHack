@@ -305,6 +305,31 @@ public class TextServiceImpl extends ServiceImpl<TextMapper, Text> implements Te
     }
 
     @Override
+    public com.baomidou.mybatisplus.core.metadata.IPage<Text> getArticlesPaged(ArticleFilterDTO filter) {
+        int pageNum = (filter != null && filter.getPage() != null && filter.getPage() > 0) ? filter.getPage() : 1;
+        int pageSize = (filter != null && filter.getSize() != null && filter.getSize() > 0) ? Math.min(filter.getSize(), 100) : 20;
+
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Text> page =
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(pageNum, pageSize);
+
+        QueryWrapper<Text> wrapper = new QueryWrapper<>();
+        // 排除大文本字段，只返回轻量元数据
+        wrapper.select("id", "title", "difficulty", "category",
+                "tags", "article_type", "book_volume",
+                "content_section", "unit_num", "order_num",
+                "cover_url", "view_count", "read_count");
+
+        if (filter != null && filter.getArticleType() != null) {
+            wrapper.eq("article_type", filter.getArticleType().name());
+        }
+        if (filter != null && filter.getKeyword() != null && !filter.getKeyword().trim().isEmpty()) {
+            wrapper.like("title", filter.getKeyword().trim());
+        }
+        wrapper.eq("deleted", 0).eq("status", "APPROVED").orderByAsc("book_volume", "unit_num", "order_num");
+        return page(page, wrapper);
+    }
+
+    @Override
     public List<Text> getTextsByDifficulty(String difficulty) {
         QueryWrapper<Text> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("difficulty", difficulty);

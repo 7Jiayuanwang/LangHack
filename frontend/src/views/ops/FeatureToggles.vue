@@ -1198,7 +1198,7 @@ onMounted(() => {
   gap: 8px;
   margin-top: 16px;
   padding: 12px 16px;
-  background: #eff6ff;
+  background: var(--xy-brand-50);
   border: 1px solid #bfdbfe;
   border-radius: 12px;
   font-size: 14px;

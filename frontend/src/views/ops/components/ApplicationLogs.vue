@@ -246,7 +246,7 @@ watch(() => props.dateRange, () => {
 .stat-value { font-size: 28px; font-weight: bold; color: #303133; }
 .stat-item.error .stat-value { color: #f56c6c; }
 .stat-item.warn  .stat-value { color: #e6a23c; }
-.stat-item.info  .stat-value { color: #409eff; }
+.stat-item.info  .stat-value { color: var(--xy-brand-600); }
 
 .filter-card { margin-bottom: 20px; }
 .logs-card   { margin-bottom: 20px; }

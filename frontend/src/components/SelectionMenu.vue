@@ -1,6 +1,21 @@
 <template>
   <div
-    v-if="visible"
+    v-if="visible && isMobile"
+    ref="menuRef"
+    class="selection-menu-mobile"
+    role="toolbar"
+    aria-label="选中文本操作"
+    @mousedown.prevent.stop
+    @touchstart.stop
+  >
+    <button type="button" @click.stop="$emit('mark')">{{ markLabel }}</button>
+    <button type="button" @click.stop="$emit('translate')">翻译</button>
+    <button type="button" @click.stop="$emit('copy')">复制</button>
+    <button type="button" @click.stop="$emit('favorite-sentence')">收藏</button>
+    <button type="button" class="selection-menu-mobile__ask" @click.stop="$emit('ai-qa')">问小芽</button>
+  </div>
+  <div
+    v-else-if="visible"
     ref="menuRef"
     class="selection-menu"
     :style="menuStyle"
@@ -24,7 +39,7 @@
       <button class="menu-item" type="button" @click.stop="$emit('copy')">复制</button>
       <button class="menu-item" type="button" @click.stop="$emit('translate')">翻译</button>
       <button class="menu-item" type="button" @click.stop="$emit('favorite-sentence')">收藏例句</button>
-      <button class="menu-item" type="button" @click.stop="$emit('ai-qa')">AI 问答</button>
+      <button class="menu-item" type="button" @click.stop="$emit('ai-qa')">问小芽</button>
     </template>
   </div>
 </template>
@@ -44,6 +59,9 @@ defineEmits(['copy', 'mark', 'translate', 'favorite-sentence', 'ai-qa'])
 
 const expanded = ref(false)
 const menuRef = ref(null)
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const isMobile = computed(() => viewportWidth.value <= 768)
+const updateViewportWidth = () => { viewportWidth.value = window.innerWidth }
 const collapse = () => { expanded.value = false }
 
 const handleOutsidePointer = (event) => {
@@ -52,9 +70,11 @@ const handleOutsidePointer = (event) => {
 
 onMounted(() => document.addEventListener('pointerdown', handleOutsidePointer))
 onMounted(() => document.addEventListener('selectionchange', collapse))
+onMounted(() => window.addEventListener('resize', updateViewportWidth))
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleOutsidePointer)
   document.removeEventListener('selectionchange', collapse)
+  window.removeEventListener('resize', updateViewportWidth)
 })
 
 // A new selection can keep the menu visible, so visibility alone is not enough
@@ -67,17 +87,9 @@ watch(
 )
 
 const menuStyle = computed(() => {
-  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 375
-  const x = Math.min(Math.max(props.position?.x ?? 0, 118), viewportWidth - 118)
+  const width = viewportWidth.value
+  const x = Math.min(Math.max(props.position?.x ?? 0, 118), width - 118)
   const y = props.position?.y ?? 0
-
-  if (viewportWidth <= 768) {
-    return {
-      left: `${x}px`,
-      bottom: `calc(100vh - ${y - 12}px)`,
-      transform: 'translateX(-50%)'
-    }
-  }
 
   return { left: `${x}px`, top: `${y}px`, transform: 'translateX(-50%)' }
 })
@@ -136,6 +148,35 @@ const menuStyle = computed(() => {
   transition: transform 0.15s;
 }
 .triangle.open { transform: rotate(180deg); }
+.selection-menu-mobile {
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 4px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--xy-border, #d9e8df);
+  background: #fff;
+  box-shadow: 0 -8px 24px rgba(30, 93, 70, 0.12);
+}
+.selection-menu-mobile button {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--xy-brand-50, #ecfbf5);
+  color: var(--xy-ink, #203e32);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.selection-menu-mobile .selection-menu-mobile__ask { background: var(--xy-brand-600, #187453); color: #fff; }
 @media (max-width: 480px) {
   .selection-menu { border-radius: 20px; }
 }

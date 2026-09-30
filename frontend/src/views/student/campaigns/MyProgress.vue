@@ -873,7 +873,7 @@ onMounted(() => {
 .current-score {
   font-size: 24px;
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .target-score {
@@ -1002,7 +1002,7 @@ onMounted(() => {
 
 .rank-item.is-me {
   background: linear-gradient(135deg, #e0f2ff 0%, #d0e7ff 100%);
-  border: 2px solid #409eff;
+  border: 2px solid var(--xy-brand-600);
 }
 
 .rank-number {
@@ -1037,7 +1037,7 @@ onMounted(() => {
 .rank-score {
   font-size: 16px;
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 @media (max-width: 768px) {
@@ -1077,8 +1077,8 @@ onMounted(() => {
 }
 
 .score-detail-item.expanded {
-  border-color: #409eff;
-  background: #f5f9ff;
+  border-color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 .score-detail-expand {
@@ -1169,7 +1169,7 @@ onMounted(() => {
 }
 
 .record-value {
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-weight: 500;
   min-width: 60px;
 }
@@ -1252,7 +1252,7 @@ onMounted(() => {
 
 .award-rank.rank-1 { background: #f56c6c; }
 .award-rank.rank-2 { background: #e6a23c; }
-.award-rank.rank-3 { background: #409eff; }
+.award-rank.rank-3 { background: var(--xy-brand-600); }
 
 .award-name {
   flex: 1;
@@ -1268,7 +1268,7 @@ onMounted(() => {
 .award-score {
   font-size: 14px;
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .score-logs-card {
@@ -1422,7 +1422,7 @@ onMounted(() => {
 .activity-number {
   font-size: 32px;
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .activity-total {

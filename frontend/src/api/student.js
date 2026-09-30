@@ -447,11 +447,14 @@ export function recordLearning(data) {
 }
 
 // 标记课文为完成
-export function markTextAsCompleted(textId, assignmentId = null) {
+export function markTextAsCompleted(textId, assignmentId = null, contentVersion = null) {
+  const params = {}
+  if (assignmentId) params.assignmentId = assignmentId
+  if (contentVersion) params.contentVersion = contentVersion
   return request({
     url: `/api/student/learning/texts/${textId}/complete`,
     method: 'post',
-    params: assignmentId ? { assignmentId } : {}
+    params
   })
 }
 

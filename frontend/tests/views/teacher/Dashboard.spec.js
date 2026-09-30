@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { shallowMount } from '@vue/test-utils'
 
+const routerPush = vi.hoisted(() => vi.fn())
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() })
+  useRouter: () => ({ push: routerPush })
 }))
 
 vi.mock('element-plus', () => ({
@@ -67,8 +69,7 @@ describe('Teacher Dashboard.vue', () => {
   it('viewClassDetail navigates to class', () => {
     const wrapper = createWrapper()
     wrapper.vm.viewClassDetail({ id: 3 })
-    // just verifies no error thrown
-    expect(true).toBe(true)
+    expect(routerPush).toHaveBeenCalledWith('/teacher/classes/3')
   })
 
   it('loadDashboardData calls fetch', async () => {

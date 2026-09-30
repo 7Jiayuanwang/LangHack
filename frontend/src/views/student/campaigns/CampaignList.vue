@@ -472,7 +472,7 @@ onMounted(() => {
 
 .score {
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-size: 16px;
 }
 

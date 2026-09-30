@@ -239,6 +239,12 @@ const routes = [
         component: () => import("@/views/admin/campaigns/EnrollmentManagement.vue"),
         meta: { title: "报名管理", roles: ["ADMIN"], featureKey: "admin.campaigns" },
       },
+      {
+        path: "task-plans",
+        name: "AdminTaskPlans",
+        component: () => import("@/views/admin/TaskPlans.vue"),
+        meta: { title: "默认任务", roles: ["ADMIN"] },
+      },
     ],
   },
   {
@@ -330,6 +336,12 @@ const routes = [
         meta: { title: "班级管理", roles: ["TEACHER"] },
       },
       {
+        path: "classes/:classId",
+        name: "TeacherClassLearningOverview",
+        component: () => import("@/views/teacher/ClassLearningOverview.vue"),
+        meta: { title: "班级学情", roles: ["TEACHER"] },
+      },
+      {
         path: "courses",
         name: "TeacherCourses",
         component: () => import("@/views/teacher/Courses.vue"),
@@ -378,6 +390,12 @@ const routes = [
         meta: { title: "选课记录", roles: ["TEACHER"], featureKey: "teacher.school_data_enabled" },
       },
       {
+        path: "task-plans",
+        name: "TeacherTaskPlans",
+        component: () => import("@/views/teacher/TaskPlans.vue"),
+        meta: { title: "默认任务", roles: ["TEACHER"] },
+      },
+      {
         path: "ai-qa",
         name: "TeacherAiQa",
         component: () => import("@/views/teacher/AiQa.vue"),
@@ -413,6 +431,12 @@ const routes = [
         meta: { title: "我的任务", roles: ["STUDENT", "USER"], featureKey: "page_assignments" },
       },
       {
+        path: "task-plans",
+        name: "StudentTaskPlans",
+        component: () => import("@/views/student/TaskPlans.vue"),
+        meta: { title: "学期目标", roles: ["STUDENT", "USER"] },
+      },
+      {
         path: "words",
         name: "StudentWords",
         component: () => import("@/views/student/Words.vue"),
@@ -437,6 +461,12 @@ const routes = [
         name: "StudentClasses",
         component: () => import("@/views/student/Classes.vue"),
         meta: { title: "我的班级", roles: ["STUDENT", "USER"], featureKey: "page_classes" },
+      },
+      {
+        path: "learning-agent",
+        name: "StudentLearningAgent",
+        component: () => import("@/views/student/LearningAgent.vue"),
+        meta: { title: "英语学习伙伴", roles: ["STUDENT", "USER"] },
       },
       {
         path: "ai-qa",

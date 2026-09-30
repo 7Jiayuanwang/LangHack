@@ -843,14 +843,14 @@ defineExpose({ loadData })
   gap: 12px;
   margin-bottom: 16px;
   padding: 12px 16px;
-  background: #ecf5ff;
+  background: var(--xy-brand-50);
   border-radius: 8px;
   border: 1px solid #b3d8ff;
 }
 
 .selected-count {
   font-size: 14px;
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-weight: 500;
 }
 

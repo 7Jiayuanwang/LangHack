@@ -175,7 +175,7 @@ onMounted(() => { loadVideos() })
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  background: linear-gradient(to right, #0f172a, rgba(29,78,216,0.8));
+  background: linear-gradient(to right, #0f172a, rgba(23, 110, 81,0.8));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -266,7 +266,7 @@ onMounted(() => { loadVideos() })
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #1d4ed8;
+  color: var(--xy-brand-700);
   box-shadow: 0 4px 16px rgba(0,0,0,0.2);
 }
 
@@ -325,8 +325,8 @@ onMounted(() => { loadVideos() })
   padding: 0 6px;
   border-radius: 8px;
   font-size: 11px;
-  color: #2563eb;
-  background: #eff6ff;
+  color: var(--xy-brand-600);
+  background: var(--xy-brand-50);
 }
 
 .video-footer {
@@ -337,8 +337,8 @@ onMounted(() => { loadVideos() })
 }
 
 .video-tag {
-  background: rgba(29,78,216,0.08);
-  color: #1d4ed8;
+  background: rgba(23, 110, 81,0.08);
+  color: var(--xy-brand-700);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 11px;

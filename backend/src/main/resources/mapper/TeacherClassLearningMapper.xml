@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.english.mapper.TeacherClassLearningMapper">
+
+    <resultMap id="StudentLearningMap" type="com.english.dto.teacher.TeacherClassStudentLearningRow">
+        <id property="studentId" column="student_id"/>
+        <result property="username" column="username"/>
+        <result property="displayName" column="display_name"/>
+        <result property="readingSessions" column="reading_sessions"/>
+        <result property="textsRead" column="texts_read"/>
+        <result property="lastReadingAt" column="last_reading_at"/>
+        <result property="practiceAttempts" column="practice_attempts"/>
+        <result property="correctAnswers" column="correct_answers"/>
+        <result property="answeredQuestions" column="answered_questions"/>
+        <result property="lastPracticeAt" column="last_practice_at"/>
+    </resultMap>
+
+    <resultMap id="WeeklyLearningMap" type="com.english.dto.teacher.TeacherClassWeeklyLearningRow">
+        <id property="weekStart" column="week_start"/>
+        <result property="readingStudents" column="reading_students"/>
+        <result property="readingSessions" column="reading_sessions"/>
+        <result property="quizStudents" column="quiz_students"/>
+        <result property="practiceAttempts" column="practice_attempts"/>
+        <result property="correctAnswers" column="correct_answers"/>
+        <result property="answeredQuestions" column="answered_questions"/>
+    </resultMap>
+
+    <!-- Current members only. These are their platform-wide activities, not only assigned class articles. -->
+    <select id="selectStudentLearning" resultMap="StudentLearningMap">
+        SELECT sc.student_id,
+               u.username,
+               COALESCE(NULLIF(TRIM(u.real_name), ''), NULLIF(TRIM(u.nickname), ''), u.username) AS display_name,
+               COALESCE(reading.reading_sessions, 0) AS reading_sessions,
+               COALESCE(reading.texts_read, 0) AS texts_read,
+               reading.last_reading_at,
+               COALESCE(quiz.practice_attempts, 0) AS practice_attempts,
+               COALESCE(quiz.correct_answers, 0) AS correct_answers,
+               COALESCE(quiz.answered_questions, 0) AS answered_questions,
+               quiz.last_practice_at
+        FROM student_classes sc
+        JOIN users u ON u.id = sc.student_id AND u.deleted = 0
+        LEFT JOIN (
+            SELECT r.student_id,
+                   COUNT(*) AS reading_sessions,
+                   COUNT(DISTINCT r.text_id) AS texts_read,
+                   MAX(r.start_time) AS last_reading_at
+            FROM text_learning_records r
+            JOIN student_classes member ON member.student_id = r.student_id
+                AND member.class_id = #{classId}
+                AND (member.status = 'ACTIVE' OR member.status IS NULL)
+            WHERE r.start_time >= #{fromTime} AND r.start_time &lt; #{untilTime}
+            GROUP BY r.student_id
+        ) reading ON reading.student_id = sc.student_id
+        LEFT JOIN (
+            SELECT a.student_id,
+                   COUNT(*) AS practice_attempts,
+                   SUM(a.correct_count) AS correct_answers,
+                   SUM(a.total_questions) AS answered_questions,
+                   MAX(a.submitted_time) AS last_practice_at
+            FROM student_ai_quiz_attempts a
+            JOIN student_classes member ON member.student_id = a.student_id
+                AND member.class_id = #{classId}
+                AND (member.status = 'ACTIVE' OR member.status IS NULL)
+            WHERE a.submitted_time >= #{fromTime} AND a.submitted_time &lt; #{untilTime}
+            GROUP BY a.student_id
+        ) quiz ON quiz.student_id = sc.student_id
+        WHERE sc.class_id = #{classId}
+          AND (sc.status = 'ACTIVE' OR sc.status IS NULL)
+        ORDER BY display_name, sc.student_id
+    </select>
+
+    <select id="selectWeeklyReading" resultMap="WeeklyLearningMap">
+        SELECT DATE_SUB(DATE(r.start_time), INTERVAL WEEKDAY(r.start_time) DAY) AS week_start,
+               COUNT(DISTINCT r.student_id) AS reading_students,
+               COUNT(*) AS reading_sessions
+        FROM text_learning_records r
+        JOIN student_classes sc ON sc.student_id = r.student_id
+            AND sc.class_id = #{classId}
+            AND (sc.status = 'ACTIVE' OR sc.status IS NULL)
+        JOIN users u ON u.id = r.student_id AND u.deleted = 0
+        WHERE r.start_time >= #{fromTime} AND r.start_time &lt; #{untilTime}
+        GROUP BY week_start
+        ORDER BY week_start
+    </select>
+
+    <select id="selectWeeklyQuiz" resultMap="WeeklyLearningMap">
+        SELECT DATE_SUB(DATE(a.submitted_time), INTERVAL WEEKDAY(a.submitted_time) DAY) AS week_start,
+               COUNT(DISTINCT a.student_id) AS quiz_students,
+               COUNT(*) AS practice_attempts,
+               SUM(a.correct_count) AS correct_answers,
+               SUM(a.total_questions) AS answered_questions
+        FROM student_ai_quiz_attempts a
+        JOIN student_classes sc ON sc.student_id = a.student_id
+            AND sc.class_id = #{classId}
+            AND (sc.status = 'ACTIVE' OR sc.status IS NULL)
+        JOIN users u ON u.id = a.student_id AND u.deleted = 0
+        WHERE a.submitted_time >= #{fromTime} AND a.submitted_time &lt; #{untilTime}
+        GROUP BY week_start
+        ORDER BY week_start
+    </select>
+</mapper>

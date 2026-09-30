@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.stream.Collectors;
+import com.english.util.TextEncodingRepair;
 
 /**
  * 用户阅读统计DTO
@@ -200,6 +201,7 @@ public class PublicTextController {
                 if (count != null && count > 0 && refreshed.size() > count) {
                     refreshed = new ArrayList<>(refreshed.subList(0, count));
                 }
+                TextEncodingRepair.repairAll(refreshed);
                 authorEnricher.enrichTexts(refreshed);
                 return Result.success(refreshed);
             }
@@ -233,6 +235,7 @@ public class PublicTextController {
                 result.addAll(randomPool.subList(0, Math.min(remaining, randomPool.size())));
             }
 
+            TextEncodingRepair.repairAll(result);
             authorEnricher.enrichTexts(result);
             return Result.success(result);
         } catch (Exception e) {
@@ -271,6 +274,7 @@ public class PublicTextController {
             if (size > 100) size = 100;
 
             List<Text> texts = textService.getPublicTexts(page, size, difficulty, keyword);
+            TextEncodingRepair.repairAll(texts);
             authorEnricher.enrichTexts(texts);
 
             // 获取总数（不分页）
@@ -331,6 +335,7 @@ public class PublicTextController {
             if (result == null) {
                 result = new ArrayList<>();
             }
+            TextEncodingRepair.repairAll(result);
             authorEnricher.enrichTexts(result);
             return Result.success(result);
         } catch (Exception e) {
@@ -499,6 +504,7 @@ public class PublicTextController {
                 Collections.shuffle(randomTexts);
             }
 
+            TextEncodingRepair.repairAll(randomTexts);
             authorEnricher.enrichTexts(randomTexts);
             return Result.success(randomTexts);
         } catch (Exception e) {
@@ -611,6 +617,7 @@ public class PublicTextController {
 
             // 刷新查看次数（原子操作已执行）
             text = textService.getTextById(textId);
+            TextEncodingRepair.repair(text);
 
             // 构建版本DTO
             TextVersionsDTO dto = new TextVersionsDTO();

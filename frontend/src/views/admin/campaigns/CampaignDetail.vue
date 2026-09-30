@@ -350,7 +350,7 @@ onMounted(() => {
 .stat-value {
   font-size: 32px;
   font-weight: bold;
-  color: #409eff;
+  color: var(--xy-brand-600);
   margin-bottom: 10px;
 }
 

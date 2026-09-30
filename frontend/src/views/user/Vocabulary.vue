@@ -753,7 +753,7 @@ onBeforeUnmount(() => {
 }
 
 .value.new {
-  color: #409eff;
+  color: var(--xy-brand-600);
 }
 
 .value.learning {
@@ -784,7 +784,7 @@ onBeforeUnmount(() => {
 }
 
 .selected-count {
-  color: #409eff;
+  color: var(--xy-brand-600);
   font-size: 14px;
 }
 
@@ -803,7 +803,7 @@ onBeforeUnmount(() => {
 
 .vocabulary-item.selected {
   background-color: #e6f7ff;
-  border-color: #409eff;
+  border-color: var(--xy-brand-600);
 }
 
 .word-checkbox {

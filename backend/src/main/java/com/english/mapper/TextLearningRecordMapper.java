@@ -56,4 +56,17 @@ public interface TextLearningRecordMapper extends BaseMapper<TextLearningRecord>
             "WHERE student_id = #{studentId} AND content_version IS NOT NULL " +
             "GROUP BY content_version ORDER BY SUM(duration_seconds) DESC LIMIT 1")
     String selectPrimaryVersion(@Param("studentId") Long studentId);
+
+    @Select("SELECT r.text_id FROM text_learning_records r " +
+            "WHERE r.student_id = #{studentId} AND r.is_completed = 0 " +
+            "AND NOT EXISTS (SELECT 1 FROM text_learning_records done " +
+            "WHERE done.student_id = r.student_id AND done.text_id = r.text_id " +
+            "AND done.is_completed = 1) " +
+            "ORDER BY r.start_time DESC, r.id DESC LIMIT 1")
+    Long selectLatestUnfinishedTextId(@Param("studentId") Long studentId);
+
+    @Select("SELECT text_id FROM text_learning_records " +
+            "WHERE student_id = #{studentId} AND is_completed = 1 " +
+            "GROUP BY text_id ORDER BY MAX(end_time) DESC LIMIT 500")
+    List<Long> selectRecentlyCompletedTextIds(@Param("studentId") Long studentId);
 }

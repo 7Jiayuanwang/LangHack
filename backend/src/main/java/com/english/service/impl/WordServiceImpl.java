@@ -80,6 +80,7 @@ public class WordServiceImpl extends ServiceImpl<WordMapper, Word> implements Wo
         QueryWrapper<Word> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("word", word.toLowerCase());
         queryWrapper.eq("deleted", 0);
+        queryWrapper.last("LIMIT 1");
         return getOne(queryWrapper);
     }
 

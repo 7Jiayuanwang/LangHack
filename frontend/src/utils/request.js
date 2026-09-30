@@ -119,9 +119,14 @@ async function handle401(failedRequestConfig) {
 request.interceptors.request.use(
   config => {
     try {
-      const authHeader = getAuthHeader()
-      if (authHeader) {
-        config.headers['Authorization'] = authHeader
+      // Public auth endpoints must not inherit a stale token from a previous session.
+      const requestUrl = config.url || ''
+      const isPublicAuthRequest = /\/api\/auth\/(login|register|sso\/status|sso\/login-url|sso\/token)(?:$|\?)/.test(requestUrl)
+      if (!isPublicAuthRequest) {
+        const authHeader = getAuthHeader()
+        if (authHeader) {
+          config.headers['Authorization'] = authHeader
+        }
       }
     } catch (e) {
       console.error('Token processing error:', e)

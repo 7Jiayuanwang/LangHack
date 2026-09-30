@@ -1,5 +1,18 @@
 <template>
   <div class="trend-dashboard">
+    <XyPageHeader class="dashboard-intro" variant="hero" eyebrow="GROW WITH XIAOYA" :title="agentCardTitle" :description="agentCardDescription">
+      <template #visual><XyMascot :size="88" /></template>
+      <template v-if="agentContext?.goals?.length" #details>
+        <div class="agent-goal-chips">
+          <span v-for="goal in agentContext.goals.slice(0, 3)" :key="goal.id || goal.goalType">{{ goal.title }}</span>
+        </div>
+      </template>
+      <template #actions>
+        <button type="button" class="agent-entry-action" @click="openLearningAgent">
+          {{ agentContext?.onboardingCompleted ? '继续交流' : '开始认识我' }} <span aria-hidden="true">→</span>
+        </button>
+      </template>
+    </XyPageHeader>
     <!-- 现代化统计网格 -->
     <div class="stats-grid">
       <div class="stat-card trend-courses">
@@ -409,7 +422,10 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import FollowSummary from '@/components/FollowSummary.vue'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
+import XyMascot from '@/components/ui/XyMascot.vue'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import { getLearningAgentContext } from '@/api/learningAgent'
 import {
   getStudentDashboard,
   getTodayLearningStats,
@@ -425,6 +441,13 @@ const router = useRouter()
 const { isEnabled, load: loadFeatureToggles, isLoaded } = useFeatureToggles()
 
 const loading = ref(false)
+const agentContext = ref(null)
+const agentCardTitle = computed(() => agentContext.value?.onboardingCompleted
+  ? (agentContext.value.greeting || '今天想让英语帮你做什么？')
+  : '先聊聊你的目标和兴趣吧')
+const agentCardDescription = computed(() => agentContext.value?.onboardingCompleted
+  ? '我可以陪你拆解目标、安排学习，也可以直接讨论一个英语问题。'
+  : '告诉我你是为了四六级、考研、论文阅读，还是想用英语探索自己的兴趣。')
 const dashboardData = reactive({
   enrolledCourses: 0,
   vocabularyCount: 0,
@@ -646,6 +669,19 @@ const loadLearningStats = async () => {
   }
 }
 
+const loadAgentContext = async () => {
+  try {
+    const response = await getLearningAgentContext()
+    if (response?.code === 200 && response.data) agentContext.value = response.data
+  } catch (error) {
+    // 智能体数据尚未迁移或暂时不可用时，首页仍展示静态入口。
+  }
+}
+
+const openLearningAgent = () => {
+  router.push('/student/learning-agent')
+}
+
 // 进入课程
 const enterCourse = (courseClass) => {
   router.push(`/student/courses?courseId=${courseClass.courseId}`)
@@ -747,6 +783,7 @@ const formatScore = (score) => {
 }
 
 onMounted(() => {
+  loadAgentContext()
   loadDashboardData()
   loadLearningStats()
   loadDailyWordReciteProgress()
@@ -768,11 +805,17 @@ onMounted(() => {
 /* 现代化Dashboard样式 */
 .trend-dashboard {
   min-height: calc(100vh - 120px);
-  background: var(--bg-secondary);
+  background: var(--xy-gradient-page);
   padding: 16px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   overflow-x: hidden;
 }
+.dashboard-intro { margin-bottom: 18px; }
+
+.agent-goal-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.agent-goal-chips span { padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,.72); color: var(--xy-brand-700); font-size: 11px; }
+.agent-entry-action { min-height: 44px; display: inline-flex; align-items: center; gap: 9px; border: none; border-radius: var(--xy-radius-sm); padding: 0 17px; background: var(--xy-gradient-brand); color: white; font-weight: 700; cursor: pointer; box-shadow: var(--xy-shadow-card); }
+.agent-entry-action:hover { transform: translateY(-1px); }
 
 /* 现代化统计网格 */
 .stats-grid {
@@ -783,13 +826,13 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-radius: 16px;
+  border-radius: var(--xy-radius-md);
   padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: var(--xy-shadow-card);
+  border: 1px solid var(--xy-border);
   position: relative;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -912,9 +955,9 @@ onMounted(() => {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  background: linear-gradient(135deg, rgba(0, 102, 204, 0.05) 0%, rgba(0, 168, 204, 0.05) 100%);
+  background: linear-gradient(135deg, var(--xy-brand-50), #f8fdf9);
   border: 1px solid var(--border-light);
-  border-radius: 16px;
+  border-radius: var(--xy-radius-md);
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1434,7 +1477,7 @@ onMounted(() => {
 }
 
 .rec-type.word {
-  background: rgba(0, 102, 204, 0.1);
+  background: rgba(23, 110, 81, 0.1);
   color: var(--primary-color);
 }
 

@@ -31,6 +31,9 @@ public interface StudentAiQuizService {
      */
     List<StudentAiQuizAttempt> listMyAttempts(Long studentId, Long textId);
 
+    /** Bounded recent attempts for the student's learning companion. */
+    List<StudentAiQuizAttempt> listRecentMyAttempts(Long studentId, int limit);
+
     /**
      * 学生端：查自己某次尝试的明细（含权限校验 — attempt 必须属于该学生）
      * @return {attempt, records}

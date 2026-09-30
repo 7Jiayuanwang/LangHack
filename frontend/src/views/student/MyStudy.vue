@@ -1,5 +1,6 @@
 <template>
   <div class="my-study-page">
+    <XyPageHeader class="study-intro" title="我的学习" eyebrow="MY LEARNING" description="回顾已经走过的路，再选择今天想继续探索的内容。" variant="hero" />
     <!-- Quick Entries Grid: 聚合被移出主导航的子页面 -->
     <section v-if="visibleEntries.length > 0" class="quick-entries">
       <h3 class="section-title">快捷入口</h3>
@@ -115,10 +116,11 @@ import { useRouter } from 'vue-router'
 import {
   Clock, Timer, Reading, Loading,
   House, Calendar, Trophy, Tickets, Notebook,
-  VideoPlay, MessageBox, Edit, User
+  VideoPlay, MessageBox, Edit, User, Histogram
 } from '@element-plus/icons-vue'
 import { getReadingHistory } from '@/api/student'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
+import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const router = useRouter()
 
@@ -126,6 +128,7 @@ const router = useRouter()
 // 注：发现页已在底部导航栏首位强制显示，不再重复列出
 const QUICK_ENTRIES = [
   { key: 'assignments',       path: '/student/assignments',       label: '任务',      icon: markRaw(Edit),      color: '#f97316', toggleKey: 'page_assignments' },
+  { key: 'task_plans',        path: '/student/task-plans',        label: '学期目标',  icon: markRaw(Histogram), color: '#3b82f6', toggleKey: null },
   { key: 'classes',           path: '/student/classes',           label: '社区',      icon: markRaw(House),     color: '#14b8a6', toggleKey: 'page_classes' },
   { key: 'schedule',          path: '/student/schedule',          label: '课表',      icon: markRaw(Calendar),  color: '#6366f1', toggleKey: 'page_schedule' },
   { key: 'scores',            path: '/student/scores',            label: '成绩',      icon: markRaw(Trophy),    color: '#f59e0b', toggleKey: 'page_scores' },
@@ -231,6 +234,7 @@ onMounted(() => {
   padding: 16px;
   min-height: 80vh;
 }
+.study-intro { margin-bottom: 20px; }
 
 .quick-entries {
   margin-bottom: 20px;
@@ -240,7 +244,7 @@ onMounted(() => {
   margin: 0 0 10px;
   font-size: 15px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--xy-ink);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -259,9 +263,9 @@ onMounted(() => {
   justify-content: center;
   gap: 6px;
   padding: 14px 6px;
-  background: #fff;
-  border: 1px solid #f1f5f9;
-  border-radius: 12px;
+  background: var(--xy-surface);
+  border: 1px solid var(--xy-border);
+  border-radius: var(--xy-radius-md);
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
 }
@@ -290,7 +294,7 @@ onMounted(() => {
 .entry-label {
   font-size: 12px;
   font-weight: 500;
-  color: #334155;
+  color: var(--xy-ink);
 }
 
 @media (max-width: 480px) {
@@ -351,7 +355,7 @@ onMounted(() => {
 
 .tab-btn.active .tab-count {
   background: rgba(19, 127, 236, 0.1);
-  color: #137fec;
+  color: var(--xy-brand-600);
 }
 
 .stats-row {
@@ -517,15 +521,15 @@ onMounted(() => {
 }
 
 .page-btn:not(:disabled):hover {
-  border-color: #1d4ed8;
-  color: #1d4ed8;
+  border-color: var(--xy-brand-700);
+  color: var(--xy-brand-700);
 }
 
 .page-btn.active {
-  background: #1d4ed8;
-  border-color: #1d4ed8;
+  background: var(--xy-brand-700);
+  border-color: var(--xy-brand-700);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.35);
+  box-shadow: 0 2px 8px rgba(23, 110, 81, 0.35);
 }
 
 .page-btn.ellipsis {
@@ -556,7 +560,7 @@ onMounted(() => {
 }
 
 .page-jump-input:focus {
-  border-color: #1d4ed8;
+  border-color: var(--xy-brand-700);
 }
 
 .page-jump-input::-webkit-inner-spin-button,

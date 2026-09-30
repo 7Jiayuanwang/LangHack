@@ -225,6 +225,7 @@ services:
       # AI 翻译（可选，也可在运维面板配置）
       AI_TRANSLATE_API_URL: ${AI_TRANSLATE_API_URL:-}
       AI_TRANSLATE_API_KEY: ${AI_TRANSLATE_API_KEY:-}
+      ARTICLE_AUDIO_STORAGE_DIR: ${ARTICLE_AUDIO_STORAGE_DIR:-/app/uploads/article-audio}
       AI_TRANSLATE_MODEL: ${AI_TRANSLATE_MODEL:-}
       # SSO Configuration
       SSO_ENABLED: ${SSO_ENABLED:-true}
@@ -242,10 +243,9 @@ services:
       GIT_SSH_KEY_DIR: "${GIT_SSH_KEY_DIR:-}"
       # 管理员叩门密钥（前后端必须一致）
       ADMIN_LOGIN_SECRET: ${ADMIN_LOGIN_SECRET:-default-secret}
-      # Flyway — 启用：重复版本号 (V25/V27) 已在 fd2c670 清理
-      # 已有数据库通过 baseline-on-migrate 接管；新机器走 init SQL + Flyway 增量迁移
-      # 本地 dev 数据库由现有初始化/迁移脚本维护，避免旧镜像误扫 JDBC 根目录。
-      SPRING_FLYWAY_ENABLED: "false"
+      # Flyway — 已启用
+      # 已有数据库需先执行 scripts/init_flyway_history.sql 初始化历史表
+      SPRING_FLYWAY_ENABLED: "true"
       SPRING_FLYWAY_LOCATIONS: classpath:db/migration
       SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
       SPRING_FLYWAY_BASELINE_VERSION: "0"

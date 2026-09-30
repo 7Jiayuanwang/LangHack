@@ -812,7 +812,7 @@ onBeforeUnmount(() => {
   margin: 0 0 2px 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1890ff;
+  color: var(--xy-brand-600);
   line-height: 1.0;
 }
 
@@ -842,7 +842,7 @@ onBeforeUnmount(() => {
   background: #f8f9fa;
   padding: 6px 8px;
   border-radius: 4px;
-  border-left: 2px solid #1890ff;
+  border-left: 2px solid var(--xy-brand-600);
   display: inline-block;
   max-width: 100%;
   text-align: left;
@@ -871,7 +871,7 @@ onBeforeUnmount(() => {
 
 .synonym-tag {
   background: #e6f7ff;
-  color: #1890ff;
+  color: var(--xy-brand-600);
   padding: 4px 10px;
   border-radius: 16px;
   font-size: 13px;
@@ -881,7 +881,7 @@ onBeforeUnmount(() => {
 }
 
 .synonym-tag:hover {
-  background: #1890ff;
+  background: var(--xy-brand-600);
   color: white;
   transform: scale(1.05);
 }
@@ -1070,7 +1070,7 @@ onBeforeUnmount(() => {
 .translate-fab:active { transform: scale(0.94) !important; }
 
 .fab-default {
-  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  background: linear-gradient(135deg, var(--xy-brand-600) 0%, #096dd9 100%);
   box-shadow: 0 4px 14px rgba(24, 144, 255, 0.5), 0 0 0 3px rgba(24, 144, 255, 0.15);
 }
 
@@ -1160,7 +1160,7 @@ onBeforeUnmount(() => {
 
 .translated-text p {
   background: #e6f7ff;
-  border-left: 3px solid #1890ff;
+  border-left: 3px solid var(--xy-brand-600);
 }
 
 @media (max-width: 768px) {
@@ -1232,7 +1232,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .tts-inline-btn:hover {
-  background: #eff6ff;
+  background: var(--xy-brand-50);
   border-color: #3b82f6;
   color: #3b82f6;
 }

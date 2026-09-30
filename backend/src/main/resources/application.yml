@@ -48,6 +48,12 @@ spring:
   application:
     name: english-learning-platform
 
+  # Streaming AI answers may take longer than Spring MVC's 60s default while
+  # the server buffers and sanitizes the upstream response.
+  mvc:
+    async:
+      request-timeout: ${SPRING_MVC_ASYNC_REQUEST_TIMEOUT:300000}
+
   servlet:
     multipart:
       max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:100GB}
@@ -174,6 +180,24 @@ recommendation:
     script-import-hours: ${RECOMMENDATION_SCRIPT_IMPORT_HOURS:21,22,23,0,1,2,3,4,8,9,10}
     manual-featured-min-priority: ${RECOMMENDATION_MANUAL_FEATURED_MIN_PRIORITY:1}
 
+agent:
+  content-discovery:
+    # 共享候选池按固定平台主题刷新；用户兴趣、专业与课表只在本地参与重排。
+    enabled: ${AGENT_CONTENT_DISCOVERY_ENABLED:true}
+    wikipedia-enabled: ${AGENT_CONTENT_WIKIPEDIA_ENABLED:true}
+    arxiv-enabled: ${AGENT_CONTENT_ARXIV_ENABLED:true}
+    europe-pmc-enabled: ${AGENT_CONTENT_EUROPE_PMC_ENABLED:true}
+    dev-community-enabled: ${AGENT_CONTENT_DEV_COMMUNITY_ENABLED:true}
+    initial-delay-ms: ${AGENT_CONTENT_INITIAL_DELAY_MS:30000}
+    refresh-ms: ${AGENT_CONTENT_REFRESH_MS:21600000}
+    connect-timeout-ms: ${AGENT_CONTENT_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${AGENT_CONTENT_READ_TIMEOUT_MS:3500}
+    catalog-topics: ${AGENT_CONTENT_CATALOG_TOPICS:technology,artificial intelligence,computer science,agriculture,environmental science,business,psychology,culture,sports science}
+    wikipedia-api: ${AGENT_CONTENT_WIKIPEDIA_API:https://en.wikipedia.org/w/api.php}
+    arxiv-api: ${AGENT_CONTENT_ARXIV_API:https://export.arxiv.org/api/query}
+    europe-pmc-api: ${AGENT_CONTENT_EUROPE_PMC_API:https://www.ebi.ac.uk/europepmc/webservices/rest/search}
+    dev-community-api: ${AGENT_CONTENT_DEV_COMMUNITY_API:https://dev.to/api/articles}
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
@@ -239,6 +263,11 @@ tts:
   voice: ${TTS_VOICE:FunAudioLLM/CosyVoice2-0.5B:alex}
   cache-dir: ${TTS_CACHE_DIR:/app/uploads/tts}
   timeout: ${TTS_TIMEOUT:60000}
+
+# 文章朗读使用本地离线引擎，独立于有额度的短文本 TTS。
+# Docker 工作目录是 /app，uploads 已挂载到宿主机。
+article-audio:
+  storage-dir: ${ARTICLE_AUDIO_STORAGE_DIR:./uploads/article-audio}
 
 async:
   version-generator:
