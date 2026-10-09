@@ -6,7 +6,7 @@
       <div class="header-actions">
         <el-button type="success" @click="triggerMdImport">
           <el-icon><Document /></el-icon>
-          批量导入 Markdown
+          批量导入文章（md / pdf）
         </el-button>
         <el-button type="primary" @click="showUploadDialog = true">
           <el-icon><Upload /></el-icon>
@@ -17,7 +17,7 @@
           上传视频
         </el-button>
         <!-- 隐藏的文件选择器 -->
-        <input type="file" ref="mdFileInputRef" multiple accept=".md,image/*" style="display: none" @change="handleMdFileChange" />
+        <input type="file" ref="mdFileInputRef" multiple accept=".md,.pdf,image/*,application/pdf" style="display: none" @change="handleMdFileChange" />
       </div>
     </div>
 
@@ -211,6 +211,15 @@
             <el-radio value="TEXT">纯文本</el-radio>
             <el-radio value="MARKDOWN">Markdown</el-radio>
           </el-radio-group>
+          <span
+            class="pdf-radio-option"
+            :class="{ loading: pdfFormLoading }"
+            @click="triggerPdfFormImport"
+          >
+            <span class="dot"></span>
+            <span class="txt">{{ pdfFormLoading ? '解析中…' : '从 PDF 导入' }}</span>
+          </span>
+          <input type="file" ref="pdfFormInputRef" accept=".pdf,application/pdf" style="display: none" @change="handlePdfFormChange" />
         </el-form-item>
 
         <!-- Task 3.3: 条件内容输入 -->
@@ -533,6 +542,7 @@ import { uploadMedia } from '@/api/media'
 import * as videoApi from '@/api/video'
 import { getPublicContentTags } from '@/api/admin'
 import { requestWritingFeedback } from '@/api/learningAgent'
+import { extractPdfToMarkdown } from '@/utils/pdfImport'
 import { useFeatureToggles } from '@/composables/useFeatureToggles'
 import { VideoPlay } from '@element-plus/icons-vue'
 
@@ -688,6 +698,52 @@ const triggerMdImport = () => {
   }
 }
 
+// 「上传课文」表单内的 PDF 导入：解析后自动填充标题与内容
+const pdfFormInputRef = ref(null)
+const pdfFormLoading = ref(false)
+
+const triggerPdfFormImport = () => {
+  if (pdfFormInputRef.value) {
+    pdfFormInputRef.value.click()
+  }
+}
+
+const handlePdfFormChange = async (event) => {
+  const file = event.target.files && event.target.files[0]
+  event.target.value = ''
+  if (!file) return
+  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+    ElMessage.error('请选择 PDF 文件')
+    return
+  }
+
+  pdfFormLoading.value = true
+  try {
+    const { totalPages, text } = await extractPdfToMarkdown(file)
+    if (!text || !text.trim()) {
+      ElMessage.error('这个 PDF 没有文字层（可能是扫描件/图片型 PDF），无法自动提取内容')
+      return
+    }
+    if (!uploadForm.title.trim()) {
+      uploadForm.title = file.name.replace(/\.pdf$/i, '').slice(0, 200)
+    }
+    const clipped = text.length > 22000 ? text.slice(0, 22000) : text
+    if (uploadForm.contentType === 'MARKDOWN') {
+      uploadMarkdownContent.value = clipped
+    } else {
+      uploadForm.content = clipped
+    }
+    ElMessage.success(
+      `已导入 PDF 内容（${totalPages} 页，${clipped.length} 字）${text.length > 22000 ? '，超出 22000 字的部分已截断' : ''}`
+    )
+  } catch (e) {
+    console.error('PDF import failed:', e)
+    ElMessage.error('PDF 解析失败：' + (e && e.message ? e.message : '未知错误'))
+  } finally {
+    pdfFormLoading.value = false
+  }
+}
+
 const closeImportDialog = () => {
   importDialogVisible.value = false
   showUploadDialog.value = true
@@ -697,21 +753,49 @@ const handleMdFileChange = async (event) => {
   const files = Array.from(event.target.files)
   if (files.length === 0) return
 
-  const mdFile = files.find(f => f.name.toLowerCase().endsWith('.md'))
-  if (!mdFile) {
-    ElMessage.error('未找到Markdown文件，请确保选中了一个.md文件')
+  const mdFile = files.find(f => /\.md$/i.test(f.name))
+  const pdfFile = files.find(f => /\.pdf$/i.test(f.name))
+  const sourceFile = mdFile || pdfFile
+  if (!sourceFile) {
+    ElMessage.error('未找到可导入的文件，请选择一个 .md 或 .pdf 文件')
     event.target.value = ''
     return
   }
+  // 选中 PDF 时先抽取正文文本，后面复用与 Markdown 完全相同的流水线
+  const isPdf = sourceFile === pdfFile
 
   // 准备弹窗
   importDialogVisible.value = true
   importProgress.value = 0
   importLogs.value = []
   importComplete.value = false
-  currentImportFile.value = mdFile.name
+  currentImportFile.value = sourceFile.name
   
-  importLogs.value.push({ type: 'info', msg: `开始提取 ${mdFile.name} 的内容...` })
+  importLogs.value.push({ type: 'info', msg: isPdf ? `开始解析 PDF：${sourceFile.name} ...` : `开始提取 ${sourceFile.name} 的内容...` })
+
+  // PDF：先用 pdf.js 抽出正文，再包装成同名 .md 交给后续流水线
+  let fileForPipeline = sourceFile
+  if (isPdf) {
+    try {
+      const { totalPages, text } = await extractPdfToMarkdown(sourceFile, (page, total) => {
+        currentImportFile.value = `${sourceFile.name}（第 ${page}/${total} 页）`
+        importProgress.value = Math.min(90, Math.floor((page / total) * 90))
+      })
+      importLogs.value.push({ type: 'info', msg: `PDF 解析完成：共 ${totalPages} 页，抽取正文 ${text.length} 字。` })
+      if (!text) {
+        importLogs.value.push({ type: 'error', msg: '未抽取到任何文字：该 PDF 可能是扫描件或图片型文件，请改用文本型 PDF，或先转成 Markdown 再导入。' })
+        importComplete.value = true
+        event.target.value = ''
+        return
+      }
+      fileForPipeline = new File([text], sourceFile.name.replace(/\.pdf$/i, '.md'), { type: 'text/markdown' })
+    } catch (err) {
+      importLogs.value.push({ type: 'error', msg: `PDF 解析失败：${err?.message || err}` })
+      importComplete.value = true
+      event.target.value = ''
+      return
+    }
+  }
   
   const reader = new FileReader()
   reader.onload = async (e) => {
@@ -719,7 +803,7 @@ const handleMdFileChange = async (event) => {
     
     // 打开上传弹窗并填充基础信息
     resetUploadForm()
-    uploadForm.title = mdFile.name.replace(/\.md$/i, '')
+    uploadForm.title = sourceFile.name.replace(/\.(md|pdf)$/i, '')
     uploadForm.contentType = 'MARKDOWN'
     
     // 正则匹配图片
@@ -819,7 +903,7 @@ const handleMdFileChange = async (event) => {
     importDialogVisible.value = false
   }
   
-  reader.readAsText(mdFile)
+  reader.readAsText(fileForPipeline)
   
   // 清空 value 允许重复选择同一批文件
   event.target.value = ''
@@ -1806,6 +1890,43 @@ onBeforeUnmount(() => {
 .writing-coach-note { color: #61786d; font-size: 13px; line-height: 1.7; }
 .writing-feedback { margin-top: 16px; padding: 16px; border-radius: 12px; background: #eff9f2; color: #285d44; }
 .writing-feedback p { margin: 10px 0 0; white-space: pre-wrap; line-height: 1.7; }
+
+/* 「从 PDF 导入」伪单选样式：与 el-radio 视觉一致（圆点 + 文字，无边框按钮） */
+.pdf-radio-option {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  margin-left: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  vertical-align: middle;
+}
+.pdf-radio-option .dot {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1px solid #dcdfe6;
+  border-radius: 50%;
+  background: #fff;
+  flex-shrink: 0;
+  transition: border-color 0.25s;
+}
+.pdf-radio-option .txt {
+  font-size: 14px;
+  line-height: 1;
+  color: #606266;
+  margin-left: 8px;
+  transition: color 0.25s;
+}
+.pdf-radio-option:hover .dot,
+.pdf-radio-option.loading .dot {
+  border-color: var(--el-color-primary, #409eff);
+}
+.pdf-radio-option:hover .txt,
+.pdf-radio-option.loading .txt {
+  color: var(--el-color-primary, #409eff);
+}
 </style>
 
 <style>
