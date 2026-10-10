@@ -223,6 +223,11 @@ hiagent:
   qa-api-key: ${HIAGENT_QA_API_KEY:}
   qa-app-id: ${HIAGENT_QA_APP_ID:}
 
+  # HiAgent Past-paper Grading App（真题主观题智能判分）
+  grading-api-url: ${HIAGENT_GRADING_API_URL:https://agent.imau.edu.cn:32400/api/proxy/api/v1}
+  grading-api-key: ${HIAGENT_GRADING_API_KEY:}
+  grading-app-id: ${HIAGENT_GRADING_APP_ID:}
+
   timeout: 180000
   max-retries: 3
 
@@ -311,6 +316,11 @@ resilience4j:
       hiagent-qa:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 15s
+        sliding-window-size: 5
+        minimum-number-of-calls: 3
+      hiagent-grading:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
         sliding-window-size: 5
         minimum-number-of-calls: 3
 

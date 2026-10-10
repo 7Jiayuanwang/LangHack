@@ -24,7 +24,7 @@
         <div class="hiagent-header">
           <div class="hiagent-title">
             <span class="title-text">HiAgent 专有协议配置</span>
-            <el-tag size="small" type="warning">三套凭证各自独立，不 fallback</el-tag>
+            <el-tag size="small" type="warning">四套凭证各自独立，不 fallback</el-tag>
           </div>
           <div class="hiagent-header-actions">
             <el-button size="small" @click="loadHiAgentConfig" :loading="hiagentLoading">
@@ -44,7 +44,8 @@
         <template #title>
           <strong>AI 改写</strong> (CET-4/6/学术版/中英对照) 使用 api_key + app_id；
           <strong>AI 问答</strong> (文章划词) 使用 qa_api_key + qa_app_id；
-          <strong>AI 出题</strong> (文章自动生成选择题) 使用 quiz_api_key + quiz_app_id。
+          <strong>AI 出题</strong> (文章自动生成选择题) 使用 quiz_api_key + quiz_app_id；
+          <strong>真题判分</strong> (主观题评分与学习分析) 使用 grading_api_key + grading_app_id。
           保存后立即生效（读取自 system_config，60s 内存缓存刷新）。
         </template>
       </el-alert>
@@ -150,6 +151,46 @@
           <div class="field-hint">
             <el-tag size="small" :type="statusMap.hiagent_quiz_app_id_configured ? 'success' : 'danger'">
               {{ statusMap.hiagent_quiz_app_id_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-divider content-position="left">
+          <span class="divider-tag">真题判分凭证（独立应用）</span>
+        </el-divider>
+
+        <el-form-item label="判分 API 地址">
+          <el-input
+            v-model="hiagentForm.hiagent_grading_api_url"
+            placeholder="https://agent.imau.edu.cn:32400/api/proxy/api/v1"
+          />
+          <div class="field-hint">独立判分应用可使用与改写应用不同的网关端口。</div>
+        </el-form-item>
+
+        <el-form-item label="判分 API Key">
+          <el-input
+            v-model="hiagentForm.hiagent_grading_api_key"
+            :type="showKeys.gradingKey ? 'text' : 'password'"
+            :placeholder="statusMap.hiagent_grading_api_key_configured ? '留空保持原值不变' : '尚未配置，请输入判分 API Key'"
+          >
+            <template #append>
+              <el-button @click="showKeys.gradingKey = !showKeys.gradingKey">
+                <el-icon><View v-if="!showKeys.gradingKey" /><Hide v-else /></el-icon>
+              </el-button>
+            </template>
+          </el-input>
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_grading_api_key_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_grading_api_key_configured ? '已配置' : '未配置' }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="判分 App ID">
+          <el-input v-model="hiagentForm.hiagent_grading_app_id" placeholder="判分 App ID（明文）" />
+          <div class="field-hint">
+            <el-tag size="small" :type="statusMap.hiagent_grading_app_id_configured ? 'success' : 'danger'">
+              {{ statusMap.hiagent_grading_app_id_configured ? '已配置' : '未配置' }}
             </el-tag>
           </div>
         </el-form-item>
@@ -624,15 +665,18 @@ const HIAGENT_KEYS = [
   'hiagent_qa_api_key',
   'hiagent_qa_app_id',
   'hiagent_quiz_api_key',
-  'hiagent_quiz_app_id'
+  'hiagent_quiz_app_id',
+  'hiagent_grading_api_url',
+  'hiagent_grading_api_key',
+  'hiagent_grading_app_id'
 ]
-const HIAGENT_SECRET_KEYS = new Set(['hiagent_api_key', 'hiagent_qa_api_key', 'hiagent_quiz_api_key'])
+const HIAGENT_SECRET_KEYS = new Set(['hiagent_api_key', 'hiagent_qa_api_key', 'hiagent_quiz_api_key', 'hiagent_grading_api_key'])
 
 const hiagentLoading = ref(false)
 const hiagentSaving  = ref(false)
 const hiagentTesting = reactive({ rewrite: false, qa: false, quiz: false })
 const hiagentResults = reactive({ rewrite: null, qa: null, quiz: null })
-const showKeys       = reactive({ rewriteKey: false, qaKey: false, quizKey: false })
+const showKeys       = reactive({ rewriteKey: false, qaKey: false, quizKey: false, gradingKey: false })
 const statusMap      = reactive({
   hiagent_api_url_configured:      false,
   hiagent_api_key_configured:      false,
@@ -641,16 +685,21 @@ const statusMap      = reactive({
   hiagent_qa_app_id_configured:    false,
   hiagent_quiz_api_key_configured: false,
   hiagent_quiz_app_id_configured:  false,
+  hiagent_grading_api_url_configured: false,
+  hiagent_grading_api_key_configured: false,
+  hiagent_grading_app_id_configured:  false,
   rewrite_ready_from_db:           false,
   qa_ready_from_db:                false,
-  quiz_ready_from_db:              false
+  quiz_ready_from_db:              false,
+  grading_ready_from_db:           false
 })
 
 // 保存原始（脱敏）值，用于判断用户是否修改过密钥字段
 const originalMaskedKeys = reactive({
   hiagent_api_key:      '',
   hiagent_qa_api_key:   '',
-  hiagent_quiz_api_key: ''
+  hiagent_quiz_api_key: '',
+  hiagent_grading_api_key: ''
 })
 
 const hiagentForm = reactive({
@@ -660,7 +709,10 @@ const hiagentForm = reactive({
   hiagent_qa_api_key:   '',
   hiagent_qa_app_id:    '',
   hiagent_quiz_api_key: '',
-  hiagent_quiz_app_id:  ''
+  hiagent_quiz_app_id:  '',
+  hiagent_grading_api_url: 'https://agent.imau.edu.cn:32400/api/proxy/api/v1',
+  hiagent_grading_api_key: '',
+  hiagent_grading_app_id: ''
 })
 
 const loadHiAgentConfig = async () => {

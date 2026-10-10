@@ -52,6 +52,15 @@ public class HiAgentConfig {
      */
     private String quizAppId;
 
+    /** Past-paper grading App API URL. */
+    private String gradingApiUrl;
+
+    /** Past-paper grading App API key. */
+    private String gradingApiKey;
+
+    /** Past-paper grading App ID. */
+    private String gradingAppId;
+
     /**
      * Request timeout in milliseconds
      */

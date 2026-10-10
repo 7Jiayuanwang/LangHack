@@ -228,7 +228,6 @@
           <p v-else-if="questionType === 'cloze'">正确答案：{{ currentQuestion.answers.map(index => optionLetter(index)).join('、') }}</p>
           <p v-else-if="questionType === 'matching'">正确答案：{{ currentQuestion.items.map(item => `${item.id}-${optionLetter(item.answer)}`).join('、') }}</p>
           <p v-else>正确答案：{{ optionLetter(currentQuestion.answer) }}</p>
-
           <div class="analysis-question">
             <div class="analysis-subtitle">本题解析</div>
             <template v-if="currentAnalysis">
@@ -289,6 +288,13 @@
             <summary>{{ currentShared.label }}（点击展开）</summary>
             <p>{{ currentShared.text }}</p>
           </details>
+          <div v-if="currentAiFeedback" class="ai-feedback">
+            <strong>智能判分：{{ currentAiFeedback.score }}/100</strong>
+            <p v-if="currentAiFeedback.summary">{{ currentAiFeedback.summary }}</p>
+            <p v-if="currentAiFeedback.issues?.length">问题：{{ currentAiFeedback.issues.join('；') }}</p>
+            <p v-if="currentAiFeedback.suggestions?.length">建议：{{ currentAiFeedback.suggestions.join('；') }}</p>
+            <p v-if="currentAiFeedback.revisedAnswer">建议答案：{{ currentAiFeedback.revisedAnswer }}</p>
+          </div>
         </div>
         </section>
       </div>
@@ -309,7 +315,9 @@
 
       <div v-if="submitted || timeUp" class="score-bar" aria-live="polite">
         客观题得分 <strong>{{ score }}/{{ objectiveCount }}</strong>
-        <span v-if="subjectiveCount"> · {{ subjectiveCount }} 道主观题请对照参考答案自评</span>
+        <span v-if="gradingResult?.finalScorePercentage != null"> · 综合得分 <strong>{{ gradingResult.finalScorePercentage }}%</strong></span>
+        <span v-if="gradingResult?.aiScorePercentage != null"> · 主观题 AI 得分 {{ gradingResult.aiScorePercentage }}/100</span>
+        <span v-else-if="subjectiveCount"> · 主观题智能分析暂不可用</span>
       </div>
     </main>
 
@@ -357,6 +365,7 @@ const currentIndex = ref(0)
 const answers = ref({})
 const submitted = ref(false)
 const submitting = ref(false)
+const gradingResult = ref(null)
 const importVisible = ref(false)
 const sharedPapers = ref([])
 const userStore = useUserStore()
@@ -502,7 +511,6 @@ const canManagePapers = computed(() => userStore.userRole === 'ADMIN' && route.n
 const allPapers = computed(() => [...sharedPapers.value, ...pastPapers])
 const filteredPapers = computed(() => allPapers.value.filter(item => item.category === selectedCategory.value))
 const currentQuestion = computed(() => activePaper.value?.questions[currentIndex.value])
-
 // ===== 解析按题对应 =====
 // 导入的真题数据里，每道题的 analysis 往往是一整块文档正文（听力原文 / 全文翻译
 // + 从该题起的多题解析）。这里建立索引，把「本题解析」和「共享材料」拆开渲染。
@@ -561,6 +569,12 @@ async function scoreWriting() {
     writingScoring.value = false
   }
 }
+
+const currentAiFeedback = computed(() => {
+  const rows = gradingResult.value?.grading?.questions
+  if (!Array.isArray(rows) || !currentQuestion.value) return null
+  return rows.find(item => String(item.questionId) === String(currentQuestion.value.id)) || null
+})
 const audioElement = ref(null)
 const playbackRate = ref(1)
 // 自定义听力播放器状态（原生 audio controls 的浏览器自带"播放速度"菜单与页面倍速下拉重复，故自制 UI）
@@ -693,6 +707,7 @@ function startPaper(paper, mode = 'study') {
   currentIndex.value = 0
   answers.value = {}
   submitted.value = false
+  gradingResult.value = null
   playbackRate.value = 1
   lpPlaying.value = false
   lpCurrent.value = 0
@@ -857,7 +872,7 @@ async function doSubmit() {
   if (submitted.value || submitting.value || !activePaper.value) return
   submitting.value = true
   try {
-    await submitPastPaperAttempt({
+    const response = await submitPastPaperAttempt({
       paperKey: String(activePaper.value.id),
       pastPaperId: activePaper.value.serverManaged ? activePaper.value.id : null,
       category: activePaper.value.category,
@@ -869,6 +884,7 @@ async function doSubmit() {
       subjectiveCount: subjectiveCount.value,
       answers: answers.value
     })
+    gradingResult.value = response?.data || response || null
     submitted.value = true
     stopTimer()
     revealed.value = false
@@ -904,6 +920,7 @@ async function leavePaper() {
   submitted.value = false
   timeUp.value = false
   revealed.value = false
+  gradingResult.value = null
 }
 
 onMounted(loadImportedPapers)
@@ -1087,6 +1104,8 @@ body.pane-resizing { cursor: col-resize; user-select: none; -webkit-user-select:
   .writing-dims li { grid-template-columns: 42px 56px 1fr; font-size: 12px; }
   .writing-score-btn { flex: 1 1 100%; }
 }
+.ai-feedback { margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cbd5e1; color: #0f766e; }
+.ai-feedback p { color: #334155; }
 .exam-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; }
 .actions-group { display: flex; gap: 12px; flex-wrap: wrap; }
 .reveal-button { border-color: #a7f3d0; color: #047857; background: #ecfdf5; }
