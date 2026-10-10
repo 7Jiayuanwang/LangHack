@@ -1,7 +1,12 @@
 import request from '@/utils/request'
 
 export const getSharedPastPapers = () => request({ url: '/api/past-papers', method: 'get' })
-export const submitPastPaperAttempt = (attempt) => request({ url: '/api/past-papers/attempts', method: 'post', data: attempt })
+export const submitPastPaperAttempt = (attempt) => request({
+  url: '/api/past-papers/attempts',
+  method: 'post',
+  data: attempt,
+  timeout: 600000
+})
 export const createSharedPastPaper = (paper) => request({ url: '/api/past-papers', method: 'post', data: paper })
 export const deleteSharedPastPaper = (id) => request({ url: `/api/past-papers/${id}`, method: 'delete' })
 export const uploadPastPaperAudio = (id, file) => {

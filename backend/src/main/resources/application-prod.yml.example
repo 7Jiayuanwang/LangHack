@@ -63,6 +63,9 @@ hiagent:
   # api-url: https://agent.imau.edu.cn:32300/api/proxy/api/v1  # 默认值，通常无需修改
   app-id: your_hiagent_app_id
   # user-id: LangHack_System  # 默认值
+  grading-api-url: https://agent.imau.edu.cn:32400/api/proxy/api/v1
+  grading-api-key: your_hiagent_grading_api_key
+  grading-app-id: your_hiagent_grading_app_id
 
 # OpenRouter（备用 AI 提供商）
 openrouter:

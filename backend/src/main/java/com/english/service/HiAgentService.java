@@ -45,6 +45,11 @@ public interface HiAgentService {
     String generateQuiz(String title, String content, int count);
 
     /**
+     * Grade subjective past-paper answers with the dedicated grading application.
+     */
+    String gradePastPaper(String gradingRequestJson);
+
+    /**
      * Create a conversation using QA credentials (exposed for streaming controller)
      */
     String createConversationForQA() throws Exception;

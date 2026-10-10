@@ -423,7 +423,8 @@ public class OpsController {
         Map<String, Object> result = new HashMap<>();
         for (String key : new String[]{"hiagent_api_url", "hiagent_api_key", "hiagent_app_id",
                                         "hiagent_qa_api_key", "hiagent_qa_app_id",
-                                        "hiagent_quiz_api_key", "hiagent_quiz_app_id"}) {
+                                        "hiagent_quiz_api_key", "hiagent_quiz_app_id",
+                                        "hiagent_grading_api_url", "hiagent_grading_api_key", "hiagent_grading_app_id"}) {
             String v = dbCfg.get(key);
             result.put(key + "_configured", v != null && !v.isBlank());
         }
@@ -434,9 +435,12 @@ public class OpsController {
                 && Boolean.TRUE.equals(result.get("hiagent_qa_app_id_configured"));
         boolean quizReady = Boolean.TRUE.equals(result.get("hiagent_quiz_api_key_configured"))
                 && Boolean.TRUE.equals(result.get("hiagent_quiz_app_id_configured"));
+        boolean gradingReady = Boolean.TRUE.equals(result.get("hiagent_grading_api_key_configured"))
+                && Boolean.TRUE.equals(result.get("hiagent_grading_app_id_configured"));
         result.put("rewrite_ready_from_db", rewriteReady);
         result.put("qa_ready_from_db", qaReady);
         result.put("quiz_ready_from_db", quizReady);
+        result.put("grading_ready_from_db", gradingReady);
         return Result.success(result);
     }
 

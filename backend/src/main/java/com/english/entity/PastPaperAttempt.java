@@ -25,6 +25,11 @@ public class PastPaperAttempt {
     private Integer subjectiveCount;
     private BigDecimal scorePercentage;
     private String answersJson;
+    private String gradingStatus;
+    private BigDecimal aiScorePercentage;
+    private BigDecimal finalScorePercentage;
+    private String gradingJson;
+    private LocalDateTime gradedTime;
     private LocalDateTime submittedTime;
     private LocalDateTime createdTime;
 }
