@@ -229,6 +229,17 @@ const paperKey = id => id.examType && id.year
 
 const EXAM_LABEL = { cet4: '四级', cet6: '六级', postgraduate: '考研英语' }
 const EXAM_DURATION = { cet4: 125, cet6: 130, postgraduate: 180 }
+// 听力时段（分钟）：官方总时长 = 写作30 + 听力? + 阅读40 + 翻译30。
+// 资料里没有听力题时（第三套通常与第一套共用听力），必须把听力时段从考试时长里扣掉，
+// 否则学生面对 14 题的卷子却有 125/130 分钟。考研英语本就不考听力，不受影响。
+const LISTENING_MINUTES = { cet4: 25, cet6: 30 }
+/** 本套实际考试时长：有听力=整套时长；缺听力=整套时长 - 听力时段。 */
+function examDuration(id, hasListening) {
+  const full = EXAM_DURATION[id.examType] || 130
+  if (hasListening) return full
+  const listening = LISTENING_MINUTES[id.examType] || 0
+  return full - listening
+}
 
 function paperTitle(id) {
   const label = EXAM_LABEL[id.examType] || ''
@@ -804,7 +815,7 @@ function convertPaper({ key, sources, category, strict }) {
     title: paperTitle(id),
     category: id.examType,
     date: `${id.year}-${String(id.month).padStart(2, '0')}`,
-    duration: EXAM_DURATION[id.examType] || 130,
+    duration: examDuration(id, hasListening),
     scope: hasListening ? '整套试卷' : '整套试卷（本套资料未提供听力题）',
     questions: ordered
   }
