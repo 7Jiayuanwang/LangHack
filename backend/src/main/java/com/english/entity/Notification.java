@@ -19,6 +19,8 @@ public class Notification {
 
     private String targetRole;
 
+    private Long targetUserId;
+
     private Long createdBy;
 
     private Boolean isActive;

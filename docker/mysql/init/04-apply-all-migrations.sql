@@ -683,7 +683,6 @@ WHERE u.role = 'TEACHER'
   AND b.sso_member_of NOT LIKE '%ou=教师%'
   AND b.sso_member_of NOT LIKE '%ou=teacher%';
 
-
 -- V2__media_annotations.sql
 
 -- ═══════════════════════════════════════════════════════════════
@@ -1606,7 +1605,6 @@ WHERE `config_group` = 'feature_toggle'
 INSERT IGNORE INTO `system_config` (`config_group`, `config_key`, `config_value`, `description`, `is_secret`) VALUES
 ('feature_toggle', 'sso.auto_grant_student', 'true', 'SSO 学号匹配 school_student 自动授权 STUDENT', 0),
 ('feature_toggle', 'sso.auto_grant_teacher', 'true', 'SSO 工号匹配 school_teacher 自动授权 TEACHER', 0);
-
 
 -- V8__school_data_cdsp.sql
 
@@ -2656,7 +2654,6 @@ INSERT IGNORE INTO field_mappings (data_source, source_field, target_field, sour
 ('teaching_plans', 'zybh', 'major_code', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 12, 1, '专业编号'),
 ('teaching_plans', 'zymc', 'major_name', 'STRING', 'STRING', 'NONE', NULL, NULL, 0, 13, 1, '专业名称');
 
-
 -- V9__media_transcoding.sql
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -2730,7 +2727,6 @@ INSERT IGNORE INTO system_config (config_group, config_key, config_value, descri
   ('content_limits', 'upload.content_size.video',              '512MB',  '视频上传大小限制（全局默认）', 0),
   ('content_limits', 'upload.content_size.excel_import',       '10MB',   'Excel批量导入大小限制',        0),
   ('content_limits', 'upload.content_size.backup_import',      '2048MB', '备份文件导入大小限制',         0);
-
 
 -- V10__ai_quiz.sql
 
@@ -2908,7 +2904,6 @@ CREATE TABLE IF NOT EXISTS `student_ai_quiz_records` (
     CONSTRAINT `fk_aiqr_text`    FOREIGN KEY (`text_id`)     REFERENCES `texts`(`id`)                   ON DELETE CASCADE,
     CONSTRAINT `fk_aiqr_ex`      FOREIGN KEY (`exercise_id`) REFERENCES `text_exercises`(`id`)          ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学生 AI 题答题明细';
-
 
 -- V11__ai_conversation_feedback.sql
 
@@ -3089,7 +3084,6 @@ PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
-
 -- V12__ai_qa.sql
 
 -- ═══════════════════════════════════════════════════════════════
@@ -3194,7 +3188,6 @@ BEGIN
 END;
 CALL _v12_add_sso_binding_cols();
 DROP PROCEDURE IF EXISTS _v12_add_sso_binding_cols;
-
 
 -- V13__learner_profile.sql
 
@@ -3362,7 +3355,6 @@ INSERT IGNORE INTO learner_composite_tags (code, display_name, tag_type, priorit
 -- 预留空迁移 — 当前无 DDL/DML
 SELECT 1;
 
-
 -- V16__reserved_school_data.sql
 
 -- ═══════════════════════════════════════════════════════════════
@@ -3373,7 +3365,6 @@ SELECT 1;
 
 -- 预留空迁移 — 当前无 DDL/DML
 SELECT 1;
-
 
 -- V17__reserved_ai_model_routing.sql
 
@@ -3386,7 +3377,6 @@ SELECT 1;
 -- 预留空迁移 — 当前无 DDL/DML
 SELECT 1;
 
-
 -- V18__reserved_content_ops.sql
 
 -- ═══════════════════════════════════════════════════════════════
@@ -3398,7 +3388,6 @@ SELECT 1;
 -- 预留空迁移 — 当前无 DDL/DML
 SELECT 1;
 
-
 -- V19__reserved_general.sql
 
 -- ═══════════════════════════════════════════════════════════════
@@ -3409,7 +3398,6 @@ SELECT 1;
 
 -- 预留空迁移 — 当前无 DDL/DML
 SELECT 1;
-
 
 -- V20__campaign_system.sql
 
@@ -4173,7 +4161,7 @@ INSERT INTO `word_associations` (`word`, `type`, `associated_word`, `definition`
 
 -- V41__user_follows.sql
 
-﻿-- V38: User follow system
+-- V38: User follow system
 -- User follow relationship table
 CREATE TABLE IF NOT EXISTS user_follows (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -4298,7 +4286,7 @@ CREATE TABLE past_papers (
 
 -- V45__notifications.sql
 
-﻿-- 通知公告系统
+-- 通知公告系统
 
 CREATE TABLE IF NOT EXISTS notifications (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -4391,6 +4379,123 @@ CREATE TABLE IF NOT EXISTS sentence_favorites (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户例句收藏';
 
 
+-- V50__task_plan_system.sql
+
+-- 默认任务计划系统
+CREATE TABLE IF NOT EXISTS task_plans (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  title VARCHAR(200) NOT NULL COMMENT '计划名称',
+  course_id BIGINT NOT NULL COMMENT '关联课程ID',
+  cycle_type ENUM('WEEKLY','MONTHLY') NOT NULL COMMENT '周期类型',
+  semester_start DATE NOT NULL COMMENT '学期开始日期',
+  semester_end DATE NOT NULL COMMENT '学期结束日期',
+  article_target INT NOT NULL DEFAULT 3 COMMENT '每周期文章篇数目标',
+  word_target INT NOT NULL DEFAULT 50 COMMENT '每周期单词数目标',
+  word_category ENUM('CET4','CET6','GAOKAO') NOT NULL DEFAULT 'CET4' COMMENT '单词词库类型',
+  paper_target INT NOT NULL DEFAULT 1 COMMENT '每周期真题套数目标',
+  article_weight INT NOT NULL DEFAULT 40 COMMENT '文章权重(0-100)',
+  word_weight INT NOT NULL DEFAULT 30 COMMENT '单词权重(0-100)',
+  paper_weight INT NOT NULL DEFAULT 30 COMMENT '真题权重(0-100)',
+  total_score DECIMAL(5,2) NOT NULL DEFAULT 100.00 COMMENT '满分值',
+  status ENUM('DRAFT','ACTIVE','CLOSED') NOT NULL DEFAULT 'DRAFT' COMMENT '计划状态',
+  created_by BIGINT NOT NULL COMMENT '创建者ID',
+  created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted TINYINT NOT NULL DEFAULT 0,
+  KEY idx_task_plan_course (course_id),
+  KEY idx_task_plan_status (status),
+  KEY idx_task_plan_created_by (created_by)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='默认任务计划';
+
+CREATE TABLE IF NOT EXISTS task_plan_classes (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  plan_id BIGINT NOT NULL COMMENT '计划ID',
+  class_id BIGINT NOT NULL COMMENT '班级ID',
+  opted_out TINYINT NOT NULL DEFAULT 0 COMMENT '教师是否退出(0否1是)',
+  article_target_override INT DEFAULT NULL COMMENT '文章目标覆盖',
+  word_target_override INT DEFAULT NULL COMMENT '单词目标覆盖',
+  word_category_override ENUM('CET4','CET6','GAOKAO') DEFAULT NULL COMMENT '词库类型覆盖',
+  paper_target_override INT DEFAULT NULL COMMENT '真题目标覆盖',
+  article_weight_override INT DEFAULT NULL COMMENT '文章权重覆盖',
+  word_weight_override INT DEFAULT NULL COMMENT '单词权重覆盖',
+  paper_weight_override INT DEFAULT NULL COMMENT '真题权重覆盖',
+  modified_by BIGINT DEFAULT NULL COMMENT '最后修改者',
+  modified_time DATETIME DEFAULT NULL,
+  UNIQUE KEY uk_plan_class (plan_id, class_id),
+  KEY idx_tpc_class (class_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务计划班级关联';
+
+CREATE TABLE IF NOT EXISTS task_plan_records (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  plan_id BIGINT NOT NULL COMMENT '计划ID',
+  student_id BIGINT NOT NULL COMMENT '学生ID',
+  class_id BIGINT NOT NULL COMMENT '班级ID',
+  period_start DATE NOT NULL COMMENT '周期开始日期',
+  period_end DATE NOT NULL COMMENT '周期结束日期',
+  articles_completed INT NOT NULL DEFAULT 0 COMMENT '已完成文章数',
+  words_completed INT NOT NULL DEFAULT 0 COMMENT '已完成单词数',
+  papers_completed INT NOT NULL DEFAULT 0 COMMENT '已完成真题数',
+  updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_record (plan_id, student_id, period_start),
+  KEY idx_tpr_student (student_id),
+  KEY idx_tpr_class (class_id),
+  KEY idx_tpr_period (period_start, period_end)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务计划学生周期记录';
+
+
+-- V51__task_plan_enhancements.sql
+
+-- V51: 任务计划功能增强
+-- 1) task_plans 新增三个全局任务项开关
+-- 2) task_plan_classes 新增六个教师覆盖列
+-- 3) 新建 word_category_map 表用于向上兼容统计
+
+ALTER TABLE task_plans
+  ADD COLUMN article_enabled TINYINT NOT NULL DEFAULT 1 AFTER paper_target,
+  ADD COLUMN word_enabled    TINYINT NOT NULL DEFAULT 1 AFTER article_enabled,
+  ADD COLUMN paper_enabled   TINYINT NOT NULL DEFAULT 1 AFTER word_enabled;
+
+ALTER TABLE task_plan_classes
+  ADD COLUMN cycle_type_override      ENUM('WEEKLY','MONTHLY') DEFAULT NULL AFTER paper_weight_override,
+  ADD COLUMN semester_start_override   DATE DEFAULT NULL AFTER cycle_type_override,
+  ADD COLUMN semester_end_override     DATE DEFAULT NULL AFTER semester_start_override,
+  ADD COLUMN article_enabled_override  TINYINT DEFAULT NULL AFTER semester_end_override,
+  ADD COLUMN word_enabled_override     TINYINT DEFAULT NULL AFTER article_enabled_override,
+  ADD COLUMN paper_enabled_override    TINYINT DEFAULT NULL AFTER word_enabled_override;
+
+CREATE TABLE IF NOT EXISTS word_category_map (
+  id        BIGINT AUTO_INCREMENT PRIMARY KEY,
+  word      VARCHAR(100) NOT NULL,
+  category  ENUM('GAOKAO','CET4','CET6') NOT NULL,
+  UNIQUE KEY uk_word_cat (word, category),
+  INDEX idx_word (word)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- V52__past_paper_attempts.sql
+
+CREATE TABLE IF NOT EXISTS past_paper_attempts (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  student_id BIGINT NOT NULL COMMENT '用户ID',
+  paper_key VARCHAR(255) NOT NULL COMMENT '内置或共享试卷唯一标识',
+  past_paper_id BIGINT DEFAULT NULL COMMENT '共享试卷ID',
+  category VARCHAR(32) NOT NULL COMMENT 'cet4/cet6/postgraduate',
+  paper_title VARCHAR(255) NOT NULL,
+  answered_count INT NOT NULL DEFAULT 0,
+  question_count INT NOT NULL DEFAULT 0,
+  objective_score INT NOT NULL DEFAULT 0,
+  objective_total INT NOT NULL DEFAULT 0,
+  subjective_count INT NOT NULL DEFAULT 0,
+  score_percentage DECIMAL(5,2) NOT NULL DEFAULT 0,
+  answers_json LONGTEXT,
+  submitted_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_ppa_student_time (student_id, submitted_time),
+  KEY idx_ppa_student_paper (student_id, paper_key),
+  KEY idx_ppa_paper (past_paper_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生真题练习提交记录';
+
+
 -- V53__assignment_templates.sql
 
 CREATE TABLE IF NOT EXISTS assignment_templates (
@@ -4410,6 +4515,8 @@ CREATE TABLE IF NOT EXISTS assignment_templates (
 -- V54__learning_agent_context.sql
 
 -- 学习伙伴智能体：用户主动目标、兴趣、偏好与可管理记忆。
+-- 智能体分支原用 V49；合并后 V49 属于 sentence_favorites。
+-- 这些表用 IF NOT EXISTS 保持幂等，以兼容已运行旧智能体分支的环境。
 
 CREATE TABLE IF NOT EXISTS learner_agent_profiles (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -4472,8 +4579,113 @@ CREATE TABLE IF NOT EXISTS learner_memories (
     INDEX idx_learner_memories_source (source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户可查看和管理的学习伙伴长期记忆';
 
+-- 若旧智能体分支已占用 Flyway V49，合并后的 V49__sentence_favorites.sql
+-- 不会再次执行；在此补建该表，避免已部署环境遗漏例句收藏功能。
+CREATE TABLE IF NOT EXISTS sentence_favorites (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  text_id BIGINT NOT NULL,
+  sentence VARCHAR(2000) NOT NULL,
+  sentence_hash BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(sentence, 256))) STORED,
+  created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_sentence_favorite (user_id, text_id, sentence_hash),
+  KEY idx_sentence_favorite_user_created (user_id, created_time),
+  KEY idx_sentence_favorite_text (text_id),
+  CONSTRAINT fk_sentence_favorite_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_sentence_favorite_text FOREIGN KEY (text_id) REFERENCES texts(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户例句收藏';
+
+
+-- V55__fix_duplicate_words.sql
+
+-- V55__fix_duplicate_words.sql
+-- 修复 words 表重复记录导致 getWordByWord selectOne() 报 TooManyResultsException
+
+-- 1. 建映射表：重复 id -> 每个词保留的最小 id
+CREATE TABLE IF NOT EXISTS _word_dup_map (
+  old_id BIGINT NOT NULL,
+  new_id BIGINT NOT NULL,
+  PRIMARY KEY (old_id)
+);
+
+SET @v55_new_id_index_exists = (
+  SELECT COUNT(*)
+  FROM information_schema.statistics
+  WHERE table_schema = DATABASE()
+    AND table_name = '_word_dup_map'
+    AND index_name = 'idx_v55_new_id'
+);
+SET @v55_add_new_id_index = IF(
+  @v55_new_id_index_exists = 0,
+  'ALTER TABLE _word_dup_map ADD INDEX idx_v55_new_id (new_id)',
+  'SELECT 1'
+);
+PREPARE v55_add_new_id_index_stmt FROM @v55_add_new_id_index;
+EXECUTE v55_add_new_id_index_stmt;
+DEALLOCATE PREPARE v55_add_new_id_index_stmt;
+
+-- V55 may be interrupted while deleting a large vocabulary_books table.
+-- Clear a partial mapping so a retry starts from a consistent snapshot.
+TRUNCATE TABLE _word_dup_map;
+
+INSERT INTO _word_dup_map (old_id, new_id)
+SELECT w.id, keeper.min_id
+FROM words w
+INNER JOIN (SELECT word, MIN(id) AS min_id FROM words WHERE deleted=0 GROUP BY word HAVING COUNT(*)>1) keeper
+  ON w.word = keeper.word
+WHERE w.deleted=0 AND w.id != keeper.min_id;
+
+-- 2. vocabulary_books：多个旧词可能同时映射到同一个新词。
+--    先为每个 (student_id, new_word_id) 选一条记录，删除其余记录，
+--    再迁移保留记录，避免 uk_student_word 冲突。
+CREATE TEMPORARY TABLE _v55_vocab_keep (
+  keep_id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO _v55_vocab_keep (keep_id)
+SELECT COALESCE(
+         MIN(CASE WHEN m.old_id IS NULL THEN vb.id END),
+         MIN(vb.id)
+       ) AS keep_id
+FROM vocabulary_books vb
+LEFT JOIN _word_dup_map m ON m.old_id = vb.word_id
+WHERE m.old_id IS NOT NULL
+   OR EXISTS (
+       SELECT 1
+       FROM _word_dup_map existing_map
+       WHERE existing_map.new_id = vb.word_id
+   )
+GROUP BY vb.student_id, COALESCE(m.new_id, vb.word_id);
+
+DELETE vb
+FROM vocabulary_books vb
+INNER JOIN _word_dup_map m ON m.old_id = vb.word_id
+LEFT JOIN _v55_vocab_keep keep_row ON keep_row.keep_id = vb.id
+WHERE keep_row.keep_id IS NULL;
+
+UPDATE vocabulary_books vb
+INNER JOIN _word_dup_map m ON vb.word_id = m.old_id
+SET vb.word_id = m.new_id;
+
+-- 3. learning_records：迁移引用
+UPDATE learning_records lr
+INNER JOIN _word_dup_map m ON lr.word_id = m.old_id
+SET lr.word_id = m.new_id;
+
+-- 4. 软删除重复的 word 记录
+UPDATE words w
+INNER JOIN _word_dup_map m ON w.id = m.old_id
+SET w.deleted = 1;
+
+-- 5. 清理映射表
+DROP TEMPORARY TABLE _v55_vocab_keep;
+DROP TABLE _word_dup_map;
+
 
 -- V56__learner_review_tasks.sql
+
+-- 学习伙伴复习计划：每位学生、每篇平台文章保留一条下一次复习任务。
+-- 只保存答题汇总和关联 ID，不复制题目、作文或对话正文。
 
 CREATE TABLE IF NOT EXISTS learner_review_tasks (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '复习任务 ID',
@@ -4494,6 +4706,7 @@ CREATE TABLE IF NOT EXISTS learner_review_tasks (
     KEY idx_learner_review_last_attempt (last_attempt_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='学习伙伴平台文章复习计划';
 
+-- 为已有答题记录建立第一版计划；按提交时间和 ID 选最近一次，保留累计练习次数。
 INSERT INTO learner_review_tasks
     (user_id, text_id, last_attempt_id, repeat_count, last_correct, last_total,
      last_attempt_time, due_at)
@@ -4525,6 +4738,7 @@ ON DUPLICATE KEY UPDATE updated_time = updated_time;
 
 -- V57__article_learning_insights.sql
 
+-- 小芽文章知识点：按文章内容、实际阅读版本和推荐层级跨学生复用。
 CREATE TABLE IF NOT EXISTS article_learning_insights (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     text_id BIGINT NOT NULL,
@@ -4536,6 +4750,7 @@ CREATE TABLE IF NOT EXISTS article_learning_insights (
     UNIQUE KEY uk_article_insight_cache (text_id, content_version, target_level, content_hash)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 个人投递和已读状态单独保存，不进入全站通知公告。
 CREATE TABLE IF NOT EXISTS article_insight_messages (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
@@ -4550,6 +4765,8 @@ CREATE TABLE IF NOT EXISTS article_insight_messages (
 
 -- V58__xiaoya_external_learning.sql
 
+-- 小芽的站外英语学习记录仅属于学生本人；点击链接和浏览行为不写入此表。
+-- 同一天可以记录多条英文收获，但成长养分最多按一天计算一次。
 CREATE TABLE IF NOT EXISTS xiaoya_external_learning (
     id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
@@ -4622,6 +4839,7 @@ VALUES
   ('ai_config', 'hiagent_grading_api_key', '', 'HiAgent 真题判分应用 API Key（独立应用）', 1),
   ('ai_config', 'hiagent_grading_app_id', '', 'HiAgent 真题判分应用 App ID（独立应用）', 0)
 ON DUPLICATE KEY UPDATE description = VALUES(description);
+
 
 -- V60__fix_past_paper_data.sql
 
@@ -4765,6 +4983,7 @@ JOIN past_papers p
 SET a.category = p.category
 WHERE a.category COLLATE utf8mb4_unicode_ci <> p.category;
 
+
 -- V61__targeted_reading_assignments.sql
 
 -- Teacher-to-student reading assignments. Versions <= 60 are immutable.
@@ -4782,3 +5001,74 @@ CREATE TABLE IF NOT EXISTS assignment_students (
     CONSTRAINT fk_assignment_students_assignment FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
     CONSTRAINT fk_assignment_students_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='定向学生作业关联';
+
+
+-- V62__repair_notification_tables.sql
+
+-- Ensure notification tables exist and support personal notifications.
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    content TEXT NOT NULL,
+    target_role VARCHAR(20) NOT NULL DEFAULT 'ALL',
+    target_user_id BIGINT NULL COMMENT 'users.id; NULL means role broadcast',
+    created_by BIGINT NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_target_role (target_role),
+    INDEX idx_notifications_target_user (target_user_id, is_active, created_at),
+    INDEX idx_is_active (is_active),
+    INDEX idx_created_at (created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='notifications';
+
+CREATE TABLE IF NOT EXISTS notification_reads (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    notification_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    read_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_notification_user (notification_id, user_id),
+    INDEX idx_user_id (user_id),
+    CONSTRAINT fk_notification_reads_notification FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='notification reads';
+
+DROP PROCEDURE IF EXISTS _v62_add_notifications_target_user;
+CREATE PROCEDURE _v62_add_notifications_target_user()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = DATABASE() AND table_name = 'notifications' AND column_name = 'target_user_id') THEN
+        ALTER TABLE notifications ADD COLUMN target_user_id BIGINT NULL AFTER target_role;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.statistics
+                   WHERE table_schema = DATABASE() AND table_name = 'notifications' AND index_name = 'idx_notifications_target_user') THEN
+        CREATE INDEX idx_notifications_target_user ON notifications (target_user_id, is_active, created_at);
+    END IF;
+END;
+CALL _v62_add_notifications_target_user();
+DROP PROCEDURE IF EXISTS _v62_add_notifications_target_user;
+
+
+-- V63__course_exemption_application.sql
+
+-- Student submission and teacher approval share this table.
+CREATE TABLE IF NOT EXISTS course_exemption_application (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    student_id BIGINT NOT NULL,
+    course_name VARCHAR(100) NOT NULL,
+    apply_type VARCHAR(20) NOT NULL,
+    exam_type VARCHAR(10) NOT NULL,
+    exam_score VARCHAR(20) NOT NULL,
+    exam_date DATE DEFAULT NULL,
+    certificate_url VARCHAR(500) NOT NULL,
+    student_remark VARCHAR(500) DEFAULT NULL,
+    converted_score INT DEFAULT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    review_comment VARCHAR(500) DEFAULT NULL,
+    reviewed_by BIGINT DEFAULT NULL,
+    reviewed_time DATETIME DEFAULT NULL,
+    created_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_cea_status_time (status, created_time),
+    KEY idx_cea_student (student_id),
+    CONSTRAINT fk_cea_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='course exemption applications';

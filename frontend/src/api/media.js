@@ -10,6 +10,7 @@ const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg']
 const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/mpga', 'audio/wav', 'audio/wave', 'audio/x-wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/aac']
 // 扩展名白名单，作为 file.type 缺失或非标准时的兜底判断
 const ALLOWED_AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'webm', 'mp4', 'm4a', 'aac']
+const ALLOWED_DOCUMENT_TYPES = ['application/pdf']
 
 /**
  * 验证文件是否满足上传要求
@@ -24,7 +25,7 @@ function validateFile(file, mediaType) {
   }
 
   // 检查文件大小
-  const maxSize = mediaType === 'IMAGE' ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE
+  const maxSize = mediaType === 'IMAGE' || mediaType === 'DOCUMENT' ? MAX_IMAGE_SIZE : MAX_VIDEO_SIZE
   if (file.size === 0) {
     return '文件不能为空'
   }
@@ -34,7 +35,7 @@ function validateFile(file, mediaType) {
   }
 
   // 检查文件类型
-  const allowedTypes = mediaType === 'IMAGE' ? ALLOWED_IMAGE_TYPES : mediaType === 'AUDIO' ? ALLOWED_AUDIO_TYPES : ALLOWED_VIDEO_TYPES
+  const allowedTypes = mediaType === 'IMAGE' ? ALLOWED_IMAGE_TYPES : mediaType === 'AUDIO' ? ALLOWED_AUDIO_TYPES : mediaType === 'DOCUMENT' ? ALLOWED_DOCUMENT_TYPES : ALLOWED_VIDEO_TYPES
   // file.type 在浏览器/系统/扩展名差异下可能为空或非标准值；若 audio 类型先按扩展名兜底
   if (mediaType === 'AUDIO' && (!file.type || !allowedTypes.includes(file.type))) {
     const ext = (file.name.split('.').pop() || '').toLowerCase()
@@ -63,8 +64,8 @@ export function uploadMedia(file, mediaType) {
   }
 
   // 验证 mediaType 值
-  if (!['IMAGE', 'VIDEO', 'AUDIO'].includes(mediaType)) {
-    return Promise.reject(new Error('媒体类型只能是 IMAGE、VIDEO 或 AUDIO'))
+  if (!['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'].includes(mediaType)) {
+    return Promise.reject(new Error('媒体类型只能是 IMAGE、VIDEO、AUDIO 或 DOCUMENT'))
   }
 
   // 前端文件验证

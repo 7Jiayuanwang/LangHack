@@ -42,6 +42,7 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
     private static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp");
     private static final Set<String> ALLOWED_VIDEO_EXTENSIONS = Set.of("mp4", "webm", "ogg", "mov", "avi", "mkv");
     private static final Set<String> ALLOWED_AUDIO_EXTENSIONS = Set.of("mp3", "wav", "ogg", "webm", "m4a", "aac");
+    private static final Set<String> ALLOWED_DOCUMENT_EXTENSIONS = Set.of("pdf");
 
     @Value("${media.upload.max-image-size:10485760}")
     private long defaultMaxImageSize;
@@ -206,6 +207,9 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             // 只要文件扩展名是合法音频扩展名即放行
             String ext = getFileExtension(fileName).toLowerCase();
             return !ext.isEmpty() && ALLOWED_AUDIO_EXTENSIONS.contains(ext);
+        } else if ("DOCUMENT".equals(mediaType)) {
+            String ext = getFileExtension(fileName).toLowerCase();
+            return "application/pdf".equals(mimeType) && ALLOWED_DOCUMENT_EXTENSIONS.contains(ext);
         }
         return false;
     }
@@ -242,8 +246,9 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
     private long resolveMaxSize(String mediaType, Long uploadedBy) {
         boolean isImage = "IMAGE".equals(mediaType);
         boolean isAudio = "AUDIO".equals(mediaType);
-        String typeKey  = isImage ? "upload.content_size.image" : isAudio ? "upload.content_size.audio" : "upload.content_size.video";
-        long   envFallback = isImage ? defaultMaxImageSize : isAudio ? defaultMaxAudioSize : defaultMaxVideoSize;
+        boolean isDocument = "DOCUMENT".equals(mediaType);
+        String typeKey  = isImage || isDocument ? "upload.content_size.image" : isAudio ? "upload.content_size.audio" : "upload.content_size.video";
+        long   envFallback = isImage || isDocument ? defaultMaxImageSize : isAudio ? defaultMaxAudioSize : defaultMaxVideoSize;
 
         // 尝试读取角色覆盖
         if (uploadedBy != null) {

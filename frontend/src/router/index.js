@@ -330,6 +330,13 @@ const routes = [
         meta: { title: "仪表盘", roles: ["TEACHER"] },
       },
       {
+        path: "exemption-approvals",
+        name: "TeacherExemptionApprovals",
+        component: () => import("@/views/teacher/ExemptionApprovals.vue"),
+        // standalone: 本页为独立工作台 UI，隐藏教师端公共标题栏与底部导航
+        meta: { title: "免修审批", roles: ["TEACHER"], standalone: true },
+      },
+      {
         path: "classes",
         name: "TeacherClasses",
         component: () => import("@/views/teacher/Classes.vue"),
@@ -531,6 +538,12 @@ const routes = [
         name: "StudentFavorites",
         component: () => import("@/views/student/Favorites.vue"),
         meta: { title: "我的收藏", roles: ["STUDENT", "USER"] },
+      },
+      {
+        path: "english-exemption",
+        name: "StudentEnglishExemption",
+        component: () => import("@/views/student/EnglishExemption.vue"),
+        meta: { title: "英语免修", roles: ["STUDENT", "USER"] },
       },
       {
         path: "schedule",

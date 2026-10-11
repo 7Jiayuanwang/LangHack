@@ -9,7 +9,7 @@
     }"
   >
     <!-- 顶部标题栏 -->
-    <header class="mobile-header" v-if="!hideHeader">
+    <header class="mobile-header" v-if="!effectiveHideHeader">
       <div class="header-left">
         <h1 class="page-title">{{ pageTitle }}</h1>
       </div>
@@ -17,7 +17,7 @@
 
     <!-- 主内容区域 -->
     <main class="mobile-main" :class="{ 'no-nav': effectiveHideNav }">
-      <div class="content-container" :class="{ 'no-padding': hideHeader }">
+      <div class="content-container" :class="{ 'no-padding': effectiveHideHeader }">
         <transition name="fade" mode="out-in">
           <slot><router-view /></slot>
         </transition>
@@ -253,8 +253,13 @@ const navItems = computed(() => {
 })
 
 // 视频播放页和文章详情页一样隐藏底部导航
+// 另：路由 meta.standalone 表示该页为独立工作台 UI，同时隐藏标题栏与底部导航
+const isStandalone = computed(() => route.meta?.standalone === true)
+
+const effectiveHideHeader = computed(() => props.hideHeader || isStandalone.value)
+
 const effectiveHideNav = computed(() => {
-  if (props.hideNav) return true
+  if (props.hideNav || isStandalone.value) return true
   const p = route.path
   return p === '/student/video-player' || p.startsWith('/article/')
 })
