@@ -5,12 +5,14 @@ import com.english.datasource.UseMaster;
 import com.english.dto.EnglishExemptionApplicationRequest;
 import com.english.entity.Class;
 import com.english.entity.CourseExemptionApplication;
+import com.english.entity.CourseExemptionReviewer;
 import com.english.entity.Notification;
 import com.english.entity.SchoolStudent;
 import com.english.entity.TeacherStudentBinding;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.mapper.CourseExemptionApplicationMapper;
+import com.english.mapper.CourseExemptionReviewerMapper;
 import com.english.mapper.NotificationMapper;
 import com.english.mapper.SchoolStudentMapper;
 import com.english.mapper.TeacherStudentBindingMapper;
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionApplicationService {
 
     private final CourseExemptionApplicationMapper applicationMapper;
+    private final CourseExemptionReviewerMapper reviewerMapper;
     private final NotificationMapper notificationMapper;
     private final TeacherStudentBindingMapper teacherStudentBindingMapper;
     private final SchoolStudentMapper schoolStudentMapper;
@@ -39,12 +42,14 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
 
     public EnglishExemptionApplicationServiceImpl(
             CourseExemptionApplicationMapper applicationMapper,
+            CourseExemptionReviewerMapper reviewerMapper,
             NotificationMapper notificationMapper,
             TeacherStudentBindingMapper teacherStudentBindingMapper,
             SchoolStudentMapper schoolStudentMapper,
             UserMapper userMapper,
             ClassService classService) {
         this.applicationMapper = applicationMapper;
+        this.reviewerMapper = reviewerMapper;
         this.notificationMapper = notificationMapper;
         this.teacherStudentBindingMapper = teacherStudentBindingMapper;
         this.schoolStudentMapper = schoolStudentMapper;
@@ -107,6 +112,12 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
         applicationMapper.insert(application);
 
         for (User reviewer : reviewers) {
+            CourseExemptionReviewer assignment = new CourseExemptionReviewer();
+            assignment.setApplicationId(application.getId());
+            assignment.setTeacherId(reviewer.getId());
+            assignment.setCreatedTime(now);
+            reviewerMapper.insert(assignment);
+
             Notification notification = new Notification();
             notification.setTitle("英语免修申请待审核");
             notification.setContent("收到一条英语免修申请（编号 #" + application.getId() + "），请在审核页面处理。");

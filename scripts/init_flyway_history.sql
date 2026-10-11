@@ -87,7 +87,8 @@ VALUES
   (52, '60', 'fix past paper data',                            'SQL', 'V60__fix_past_paper_data.sql',                            NULL, 'admin', NOW(), 0, 1),
   (53, '61', 'targeted reading assignments',                   'SQL', 'V61__targeted_reading_assignments.sql',                   NULL, 'admin', NOW(), 0, 1),
   (54, '62', 'repair notification tables',                     'SQL', 'V62__repair_notification_tables.sql',                     NULL, 'admin', NOW(), 0, 1),
-  (55, '63', 'course exemption application',                   'SQL', 'V63__course_exemption_application.sql',                   NULL, 'admin', NOW(), 0, 1);
+  (55, '63', 'course exemption application',                   'SQL', 'V63__course_exemption_application.sql',                   NULL, 'admin', NOW(), 0, 1),
+  (56, '64', 'course exemption reviewers',                     'SQL', 'V64__course_exemption_reviewers.sql',                     NULL, 'admin', NOW(), 0, 1);
 
 SELECT CONCAT('✅ Flyway 历史表初始化完成，共 ', COUNT(*), ' 条记录（含 baseline）') AS result
 FROM `flyway_schema_history`;
