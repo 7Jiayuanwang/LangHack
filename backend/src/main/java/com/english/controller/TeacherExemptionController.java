@@ -26,18 +26,22 @@ public class TeacherExemptionController {
     @GetMapping("/applications")
     public Result<?> list(@RequestParam(defaultValue = "") String status,
                           @RequestParam(defaultValue = "1") long page,
-                          @RequestParam(defaultValue = "10") long size) {
-        return exemptionService.list(status, page, size);
+                          @RequestParam(defaultValue = "10") long size,
+                          Authentication auth) {
+        User teacher = getUser(auth);
+        return exemptionService.list(status, page, size, teacher.getId(), teacher.getUsername());
     }
 
     @GetMapping("/stats")
-    public Result<?> stats() {
-        return exemptionService.stats();
+    public Result<?> stats(Authentication auth) {
+        User teacher = getUser(auth);
+        return exemptionService.stats(teacher.getId(), teacher.getUsername());
     }
 
     @GetMapping("/applications/{id}")
-    public Result<?> detail(@PathVariable Long id) {
-        return exemptionService.detail(id);
+    public Result<?> detail(@PathVariable Long id, Authentication auth) {
+        User teacher = getUser(auth);
+        return exemptionService.detail(id, teacher.getId(), teacher.getUsername());
     }
 
     @PostMapping("/applications/{id}/approve")
@@ -45,7 +49,8 @@ public class TeacherExemptionController {
                              @RequestBody(required = false) Map<String, String> body,
                              Authentication auth) {
         String comment = body == null ? null : body.get("comment");
-        return exemptionService.review(id, getUserId(auth), true, comment);
+        User teacher = getUser(auth);
+        return exemptionService.review(id, teacher.getId(), teacher.getUsername(), true, comment);
     }
 
     @PostMapping("/applications/{id}/reject")
@@ -53,11 +58,15 @@ public class TeacherExemptionController {
                             @RequestBody Map<String, String> body,
                             Authentication auth) {
         String comment = body == null ? null : body.get("comment");
-        return exemptionService.review(id, getUserId(auth), false, comment);
+        User teacher = getUser(auth);
+        return exemptionService.review(id, teacher.getId(), teacher.getUsername(), false, comment);
     }
 
-    private Long getUserId(Authentication auth) {
+    private User getUser(Authentication auth) {
         User user = userService.getUserByUsername(auth.getName());
-        return user != null ? user.getId() : null;
+        if (user == null) {
+            throw new IllegalStateException("当前教师账号不存在");
+        }
+        return user;
     }
 }

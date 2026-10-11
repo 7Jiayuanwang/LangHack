@@ -1,12 +1,12 @@
 package com.english.service;
 
 import com.english.dto.EnglishExemptionApplicationRequest;
-import com.english.entity.EnglishExemptionApplication;
+import com.english.entity.CourseExemptionApplication;
 import com.english.entity.User;
 
 public interface EnglishExemptionApplicationService {
 
-    EnglishExemptionApplication getLatestForStudent(Long studentId);
+    CourseExemptionApplication getLatestForStudent(Long studentId);
 
-    EnglishExemptionApplication submit(User student, EnglishExemptionApplicationRequest request);
+    CourseExemptionApplication submit(User student, EnglishExemptionApplicationRequest request);
 }

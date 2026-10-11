@@ -3,7 +3,7 @@
 -- 创建日期: 2026-06-21
 
 -- 1. 活动主表
-CREATE TABLE IF NOT EXISTS campaign_activities (
+CREATE TABLE campaign_activities (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     title VARCHAR(200) NOT NULL COMMENT '活动标题',
     description TEXT COMMENT '活动描述',
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS campaign_activities (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动主表';
 
 -- 2. 活动任务表
-CREATE TABLE IF NOT EXISTS campaign_tasks (
+CREATE TABLE campaign_tasks (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL COMMENT '活动ID',
     task_name VARCHAR(100) NOT NULL COMMENT '任务名称',
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS campaign_tasks (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动任务表';
 
 -- 3. 参与记录表
-CREATE TABLE IF NOT EXISTS campaign_participations (
+CREATE TABLE campaign_participations (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS campaign_participations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动参与记录';
 
 -- 4. 任务完成记录表
-CREATE TABLE IF NOT EXISTS campaign_task_completions (
+CREATE TABLE campaign_task_completions (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     task_id BIGINT NOT NULL,
@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS campaign_task_completions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务完成明细';
 
 -- 5. 手动数据录入表
-CREATE TABLE IF NOT EXISTS campaign_manual_records (
+CREATE TABLE campaign_manual_records (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     campaign_id BIGINT NOT NULL,
     task_id BIGINT NOT NULL,

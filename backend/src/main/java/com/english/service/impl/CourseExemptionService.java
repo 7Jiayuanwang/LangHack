@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.english.dto.Result;
 import com.english.entity.CourseExemptionApplication;
+import com.english.entity.Notification;
 import com.english.mapper.CourseExemptionApplicationMapper;
+import com.english.mapper.NotificationMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,11 +34,12 @@ public class CourseExemptionService {
     private static final int LANGUAGE_CERT_VALID_YEARS = 2;
 
     private final CourseExemptionApplicationMapper mapper;
+    private final NotificationMapper notificationMapper;
 
-    public Result<?> list(String status, long page, long size) {
+    public Result<?> list(String status, long page, long size, Long teacherId, String teacherUsername) {
         String normalized = normalizeStatus(status);
         Page<Map<String, Object>> p = new Page<>(Math.max(1, page), Math.min(100, Math.max(1, size)));
-        IPage<Map<String, Object>> result = mapper.selectWithStudent(p, normalized);
+        IPage<Map<String, Object>> result = mapper.selectWithStudent(p, normalized, teacherId, teacherUsername);
         for (Map<String, Object> row : result.getRecords()) {
             annotateEligibility(row);
         }
@@ -45,12 +48,12 @@ public class CourseExemptionService {
         body.put("total", result.getTotal());
         body.put("page", result.getCurrent());
         body.put("size", result.getSize());
-        body.put("counts", countByStatus());
+        body.put("counts", countByStatus(teacherId, teacherUsername));
         return Result.success(body);
     }
 
-    public Result<?> detail(Long id) {
-        CourseExemptionApplication app = mapper.selectById(id);
+    public Result<?> detail(Long id, Long teacherId, String teacherUsername) {
+        CourseExemptionApplication app = mapper.selectAccessibleById(id, teacherId, teacherUsername);
         if (app == null) return Result.error("申请不存在");
         fillConvertedScore(app);
         return Result.success(app);
@@ -64,8 +67,8 @@ public class CourseExemptionService {
     }
 
     @Transactional
-    public Result<?> review(Long id, Long teacherId, boolean approve, String comment) {
-        CourseExemptionApplication app = mapper.selectById(id);
+    public Result<?> review(Long id, Long teacherId, String teacherUsername, boolean approve, String comment) {
+        CourseExemptionApplication app = mapper.selectAccessibleById(id, teacherId, teacherUsername);
         if (app == null) return Result.error("申请不存在");
         if (!CourseExemptionApplication.STATUS_PENDING.equals(app.getStatus())) {
             return Result.error("该申请已审批完成，不能重复处理");
@@ -81,13 +84,24 @@ public class CourseExemptionService {
         // 审批时把折算成绩固化到库里，避免列表靠临时计算、导出时为空
         fillConvertedScore(app);
         mapper.updateById(app);
+        Notification notification = new Notification();
+        notification.setTitle(approve ? "英语免修申请已通过" : "英语免修申请已驳回");
+        notification.setContent(approve ? "你的大学英语免修申请已通过教师审批。"
+                : "你的大学英语免修申请未通过教师审批，请查看审批意见。");
+        notification.setTargetRole("STUDENT");
+        notification.setTargetUserId(app.getStudentId());
+        notification.setCreatedBy(teacherId);
+        notification.setIsActive(true);
+        notification.setCreatedAt(java.time.LocalDateTime.now());
+        notification.setUpdatedAt(java.time.LocalDateTime.now());
+        notificationMapper.insert(notification);
         log.info("免修申请 {} 审批结果: {}，教师 {}", id, app.getStatus(), teacherId);
         return Result.success(approve ? "已通过" : "已驳回", app);
     }
 
     /** 教师端首页角标使用。 */
-    public Result<?> stats() {
-        Map<String, Object> counts = countByStatus();
+    public Result<?> stats(Long teacherId, String teacherUsername) {
+        Map<String, Object> counts = countByStatus(teacherId, teacherUsername);
         Map<String, Object> body = new HashMap<>();
         body.put("pending", counts.get("PENDING"));
         body.put("approved", counts.get("APPROVED"));
@@ -96,13 +110,12 @@ public class CourseExemptionService {
         return Result.success(body);
     }
 
-    private Map<String, Object> countByStatus() {
+    private Map<String, Object> countByStatus(Long teacherId, String teacherUsername) {
         Map<String, Object> counts = new LinkedHashMap<>();
         long all = 0;
         for (String s : new String[]{CourseExemptionApplication.STATUS_PENDING,
                 CourseExemptionApplication.STATUS_APPROVED, CourseExemptionApplication.STATUS_REJECTED}) {
-            long c = mapper.selectCount(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<CourseExemptionApplication>()
-                    .eq("status", s));
+            long c = mapper.countAccessible(s, teacherId, teacherUsername);
             counts.put(s, c);
             all += c;
         }

@@ -1,12 +1,12 @@
 package com.english.service;
 
 import com.english.dto.EnglishExemptionApplicationRequest;
-import com.english.entity.EnglishExemptionApplication;
+import com.english.entity.CourseExemptionApplication;
 import com.english.entity.Notification;
 import com.english.entity.TeacherStudentBinding;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
-import com.english.mapper.EnglishExemptionApplicationMapper;
+import com.english.mapper.CourseExemptionApplicationMapper;
 import com.english.mapper.NotificationMapper;
 import com.english.mapper.SchoolStudentMapper;
 import com.english.mapper.TeacherStudentBindingMapper;
@@ -34,7 +34,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class EnglishExemptionApplicationServiceImplTest {
 
-    @Mock private EnglishExemptionApplicationMapper applicationMapper;
+    @Mock private CourseExemptionApplicationMapper applicationMapper;
     @Mock private NotificationMapper notificationMapper;
     @Mock private TeacherStudentBindingMapper teacherStudentBindingMapper;
     @Mock private SchoolStudentMapper schoolStudentMapper;
@@ -50,19 +50,19 @@ class EnglishExemptionApplicationServiceImplTest {
         TeacherStudentBinding binding = new TeacherStudentBinding();
         binding.setTeacherId("teacher-001");
         EnglishExemptionApplicationRequest request = new EnglishExemptionApplicationRequest();
-        request.setApplicationReason("CET-6 成绩符合学院免修要求");
+        fillRequest(request);
 
         when(applicationMapper.selectCount(any())).thenReturn(0L);
         when(teacherStudentBindingMapper.selectByStudent(eq("2023122066164"), isNull(), isNull()))
                 .thenReturn(List.of(binding));
         when(userMapper.selectList(any())).thenReturn(List.of(teacher));
         doAnswer(invocation -> {
-            EnglishExemptionApplication application = invocation.getArgument(0);
+            CourseExemptionApplication application = invocation.getArgument(0);
             application.setId(101L);
             return 1;
-        }).when(applicationMapper).insert(any(EnglishExemptionApplication.class));
+        }).when(applicationMapper).insert(any(CourseExemptionApplication.class));
 
-        EnglishExemptionApplication submitted = service.submit(student, request);
+        CourseExemptionApplication submitted = service.submit(student, request);
 
         assertEquals(101L, submitted.getId());
         assertEquals("PENDING", submitted.getStatus());
@@ -78,7 +78,7 @@ class EnglishExemptionApplicationServiceImplTest {
     void submitRejectsWhenNoTeacherCanReview() {
         User student = user(10L, "2023122066164", "STUDENT");
         EnglishExemptionApplicationRequest request = new EnglishExemptionApplicationRequest();
-        request.setApplicationReason("CET-6 成绩符合学院免修要求");
+        fillRequest(request);
 
         when(applicationMapper.selectCount(any())).thenReturn(0L);
         when(teacherStudentBindingMapper.selectByStudent(eq("2023122066164"), isNull(), isNull()))
@@ -86,7 +86,7 @@ class EnglishExemptionApplicationServiceImplTest {
         when(classService.getClassesByStudentId(student.getId())).thenReturn(List.of());
 
         assertThrows(BusinessException.class, () -> service.submit(student, request));
-        verify(applicationMapper, never()).insert(any(EnglishExemptionApplication.class));
+        verify(applicationMapper, never()).insert(any(CourseExemptionApplication.class));
         verify(notificationMapper, never()).insert(any(Notification.class));
     }
 
@@ -97,5 +97,14 @@ class EnglishExemptionApplicationServiceImplTest {
         user.setRole(role);
         user.setStatus("ACTIVE");
         return user;
+    }
+
+    private void fillRequest(EnglishExemptionApplicationRequest request) {
+        request.setCourseName("大学英语2");
+        request.setApplyType(CourseExemptionApplication.APPLY_EXEMPT_FULL);
+        request.setExamType(CourseExemptionApplication.EXAM_CET6);
+        request.setExamScore("500");
+        request.setCertificateUrl("/api/media/1/download");
+        request.setStudentRemark("CET-6 成绩符合学院免修要求");
     }
 }

@@ -4,13 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.english.datasource.UseMaster;
 import com.english.dto.EnglishExemptionApplicationRequest;
 import com.english.entity.Class;
-import com.english.entity.EnglishExemptionApplication;
+import com.english.entity.CourseExemptionApplication;
 import com.english.entity.Notification;
 import com.english.entity.SchoolStudent;
 import com.english.entity.TeacherStudentBinding;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
-import com.english.mapper.EnglishExemptionApplicationMapper;
+import com.english.mapper.CourseExemptionApplicationMapper;
 import com.english.mapper.NotificationMapper;
 import com.english.mapper.SchoolStudentMapper;
 import com.english.mapper.TeacherStudentBindingMapper;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @Service
 public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionApplicationService {
 
-    private final EnglishExemptionApplicationMapper applicationMapper;
+    private final CourseExemptionApplicationMapper applicationMapper;
     private final NotificationMapper notificationMapper;
     private final TeacherStudentBindingMapper teacherStudentBindingMapper;
     private final SchoolStudentMapper schoolStudentMapper;
@@ -38,7 +38,7 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
     private final ClassService classService;
 
     public EnglishExemptionApplicationServiceImpl(
-            EnglishExemptionApplicationMapper applicationMapper,
+            CourseExemptionApplicationMapper applicationMapper,
             NotificationMapper notificationMapper,
             TeacherStudentBindingMapper teacherStudentBindingMapper,
             SchoolStudentMapper schoolStudentMapper,
@@ -54,20 +54,20 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
 
     @Override
     @UseMaster
-    public EnglishExemptionApplication getLatestForStudent(Long studentId) {
-        return applicationMapper.selectOne(new LambdaQueryWrapper<EnglishExemptionApplication>()
-                .eq(EnglishExemptionApplication::getStudentId, studentId)
-                .orderByDesc(EnglishExemptionApplication::getCreatedAt)
+    public CourseExemptionApplication getLatestForStudent(Long studentId) {
+        return applicationMapper.selectOne(new LambdaQueryWrapper<CourseExemptionApplication>()
+                .eq(CourseExemptionApplication::getStudentId, studentId)
+                .orderByDesc(CourseExemptionApplication::getCreatedTime)
                 .last("LIMIT 1"));
     }
 
     @Override
     @UseMaster
     @Transactional
-    public EnglishExemptionApplication submit(User student, EnglishExemptionApplicationRequest request) {
-        Long pendingCount = applicationMapper.selectCount(new LambdaQueryWrapper<EnglishExemptionApplication>()
-                .eq(EnglishExemptionApplication::getStudentId, student.getId())
-                .eq(EnglishExemptionApplication::getStatus, "PENDING"));
+    public CourseExemptionApplication submit(User student, EnglishExemptionApplicationRequest request) {
+        Long pendingCount = applicationMapper.selectCount(new LambdaQueryWrapper<CourseExemptionApplication>()
+                .eq(CourseExemptionApplication::getStudentId, student.getId())
+                .eq(CourseExemptionApplication::getStatus, CourseExemptionApplication.STATUS_PENDING));
         if (pendingCount != null && pendingCount > 0) {
             throw new BusinessException("已有待审核的英语免修申请，请勿重复提交");
         }
@@ -76,14 +76,34 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
         if (reviewers.isEmpty()) {
             throw new BusinessException("未找到可审核该申请的任课教师，请联系学院教务老师");
         }
+        Integer convertedScore = CourseExemptionService.convertedScore(request.getExamType(), request.getExamScore());
+        if (convertedScore == null) {
+            throw new BusinessException("考试成绩未达到免修申请条件或成绩格式不正确");
+        }
+        if ((CourseExemptionApplication.EXAM_IELTS.equals(request.getExamType())
+                || CourseExemptionApplication.EXAM_TOEFL.equals(request.getExamType()))) {
+            if (request.getExamDate() == null) {
+                throw new BusinessException("雅思或托福申请必须填写成绩获得日期");
+            }
+            if (request.getExamDate().plusYears(2).isBefore(java.time.LocalDate.now())) {
+                throw new BusinessException("雅思或托福成绩已超出两年有效期");
+            }
+        }
 
         LocalDateTime now = LocalDateTime.now();
-        EnglishExemptionApplication application = new EnglishExemptionApplication();
+        CourseExemptionApplication application = new CourseExemptionApplication();
         application.setStudentId(student.getId());
-        application.setApplicationReason(request.getApplicationReason().trim());
-        application.setStatus("PENDING");
-        application.setCreatedAt(now);
-        application.setUpdatedAt(now);
+        application.setCourseName(request.getCourseName().trim());
+        application.setApplyType(request.getApplyType());
+        application.setExamType(request.getExamType());
+        application.setExamScore(request.getExamScore().trim());
+        application.setExamDate(request.getExamDate());
+        application.setCertificateUrl(request.getCertificateUrl().trim());
+        application.setStudentRemark(trimToNull(request.getStudentRemark()));
+        application.setConvertedScore(convertedScore);
+        application.setStatus(CourseExemptionApplication.STATUS_PENDING);
+        application.setCreatedTime(now);
+        application.setUpdatedTime(now);
         applicationMapper.insert(application);
 
         for (User reviewer : reviewers) {
@@ -100,6 +120,13 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
         }
 
         return application;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private List<User> findReviewers(User student) {

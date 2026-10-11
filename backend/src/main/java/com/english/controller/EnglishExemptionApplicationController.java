@@ -2,7 +2,7 @@ package com.english.controller;
 
 import com.english.dto.EnglishExemptionApplicationRequest;
 import com.english.dto.Result;
-import com.english.entity.EnglishExemptionApplication;
+import com.english.entity.CourseExemptionApplication;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.service.EnglishExemptionApplicationService;
@@ -33,7 +33,7 @@ public class EnglishExemptionApplicationController {
     }
 
     @GetMapping("/me")
-    public Result<EnglishExemptionApplication> getMyApplication(Authentication authentication) {
+    public Result<CourseExemptionApplication> getMyApplication(Authentication authentication) {
         User user = currentUser(authentication);
         if (user == null) {
             return Result.error(401, "未登录");
@@ -42,7 +42,7 @@ public class EnglishExemptionApplicationController {
     }
 
     @PostMapping
-    public Result<EnglishExemptionApplication> submit(
+    public Result<CourseExemptionApplication> submit(
             @Valid @RequestBody EnglishExemptionApplicationRequest request,
             Authentication authentication) {
         User user = currentUser(authentication);
