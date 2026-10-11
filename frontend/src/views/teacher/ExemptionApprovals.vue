@@ -21,7 +21,7 @@
       </div>
     </section>
 
-    <el-card class="table-card" shadow="never">
+    <el-card class="table-card" shadow="never" v-show="!isMobile">
       <el-table :data="rows" v-loading="loading" stripe style="width: 100%">
         <el-table-column label="学生" min-width="180">
           <template #default="{ row }">
@@ -119,8 +119,57 @@
       </div>
     </el-card>
 
+    <!-- 移动端卡片列表：窄屏下替代表格 -->
+    <div class="mobile-list" v-show="isMobile" v-loading="loading">
+      <div class="m-card" v-for="row in rows" :key="row.id">
+        <div class="m-head">
+          <div class="stu-avatar">{{ initials(row.studentName) }}</div>
+          <div class="m-stu">
+            <div class="m-name">{{ row.studentName || '未知学生' }}</div>
+            <div class="m-sub">{{ row.studentNo }}<template v-if="row.classNames"> · {{ row.classNames }}</template></div>
+          </div>
+          <el-tag :type="statusTagType(row.status)" size="small" effect="light">{{ statusLabel(row.status) }}</el-tag>
+        </div>
+
+        <div class="m-row"><span>申请</span><b>{{ row.courseName }} · {{ applyTypeLabel(row.applyType) }}</b></div>
+        <div class="m-row">
+          <span>成绩</span>
+          <b>{{ row.examScore }} → {{ row.convertedScore ?? '—' }} 分<small class="m-dim">（{{ examLabel(row.examType) }}）</small></b>
+        </div>
+        <div class="m-row"><span>获得时间</span><b>{{ row.examDate ? String(row.examDate).slice(0, 10) : '未填写' }}</b></div>
+        <div class="m-row">
+          <span>核验</span>
+          <el-tooltip v-if="row.check && !row.check.eligible" :content="row.check.problem" placement="top">
+            <el-tag type="danger" size="small" effect="light">不符合条件</el-tag>
+          </el-tooltip>
+          <el-tag v-else type="success" size="small" effect="light">符合申请条件</el-tag>
+        </div>
+        <div class="m-row"><span>申请时间</span><b>{{ formatTime(row.createdTime) }}</b></div>
+
+        <div class="m-actions">
+          <template v-if="row.status === 'PENDING'">
+            <el-button type="primary" size="small" @click="openReview(row, true)">通 过</el-button>
+            <el-button type="danger" plain size="small" @click="openReview(row, false)">驳 回</el-button>
+          </template>
+          <el-button size="small" @click="openDetail(row)">
+            <el-icon style="margin-right: 4px"><View /></el-icon>资 料
+          </el-button>
+          <el-button
+            v-if="row.status !== 'PENDING'"
+            size="small"
+            text
+            type="info"
+            @click="openReview(row, row.status === 'APPROVED')"
+          >
+            意见
+          </el-button>
+        </div>
+      </div>
+      <el-empty v-if="!loading && !rows.length" description="暂无申请记录" :image-size="90" />
+    </div>
+
     <!-- 资料详情抽屉 -->
-    <el-drawer v-model="detailVisible" title="申请资料详情" size="540px" :destroy-on-close="false">
+    <el-drawer v-model="detailVisible" title="申请资料详情" :size="isMobile ? '94%' : '540px'" :destroy-on-close="false">
       <div class="detail-body" v-if="detailRow">
         <!-- 学生 -->
         <div class="detail-student">
@@ -211,7 +260,7 @@
     <el-dialog
       v-model="reviewVisible"
       :title="reviewApprove ? '通过免修申请' : (reviewRow.status === 'PENDING' ? '驳回免修申请' : '审批意见')"
-      width="520px"
+      :width="isMobile ? '94%' : '520px'"
       :close-on-click-modal="false"
     >
       <div class="review-summary" v-if="reviewRow">
@@ -263,7 +312,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ChatDotRound, Collection, Document, Link, Stamp, View } from '@element-plus/icons-vue'
 import {
@@ -297,6 +346,11 @@ const submittingId = ref(null)
 
 const detailVisible = ref(false)
 const detailRow = ref(null)
+
+// 窄屏（手机）下表格切换为卡片列表，抽屉/弹窗改为近全宽
+const winWidth = ref(window.innerWidth)
+const isMobile = computed(() => winWidth.value < 768)
+const onResize = () => { winWidth.value = window.innerWidth }
 
 const load = async () => {
   loading.value = true
@@ -381,7 +435,14 @@ const examDateText = (d) => (d ? `获得时间 ${String(d).slice(0, 10)}` : '未
 const formatTime = (t) => (t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '')
 const isImage = (url) => /^data:image\//i.test(url || '') || /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url || '')
 
-onMounted(load)
+onMounted(() => {
+  window.addEventListener('resize', onResize)
+  load()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+})
 </script>
 
 <style scoped>
@@ -530,6 +591,43 @@ onMounted(load)
 .time-text { font-size: 13px; color: #606266; }
 
 .pager { display: flex; justify-content: flex-end; padding: 16px 4px 4px; }
+
+/* ── 移动端卡片列表 ── */
+.mobile-list { min-height: 160px; }
+
+.m-card {
+  background: #fff;
+  border: 1px solid var(--xy-border, #ebeef5);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.m-head { display: flex; align-items: center; gap: 12px; }
+.m-stu { flex: 1; min-width: 0; }
+.m-name { font-weight: 700; font-size: 15px; color: #303133; }
+.m-sub { font-size: 12px; color: #909399; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.m-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+.m-row > span { width: 56px; flex-shrink: 0; color: #909399; }
+.m-row > b { font-weight: 500; color: #303133; word-break: break-all; }
+.m-dim { font-weight: 400; color: #909399; }
+
+.m-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--xy-border, #ebeef5);
+}
 
 /* ── 详情抽屉 ── */
 .detail-body { padding: 0 4px; }
