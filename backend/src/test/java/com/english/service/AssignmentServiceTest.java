@@ -77,6 +77,15 @@ class AssignmentServiceTest {
     private LearningRecordMapper learningRecordMapper;
 
     @Mock
+    private TextLearningRecordMapper textLearningRecordMapper;
+
+    @Mock
+    private AssignmentStudentMapper assignmentStudentMapper;
+
+    @Mock
+    private UserMapper userMapper;
+
+    @Mock
     private CourseService courseService;
 
     @Mock
@@ -171,6 +180,16 @@ class AssignmentServiceTest {
         assignmentService.createAssignment(textAssignment);
 
         verify(assignmentMapper).insert(textAssignment);
+    }
+
+    @Test
+    void createAssignment_flexibleReadingWithoutUnit_succeeds() {
+        Assignment assignment = flexibleReadingAssignment(1, 0);
+        when(assignmentMapper.insert(any(Assignment.class))).thenReturn(1);
+
+        assignmentService.createAssignment(assignment);
+
+        verify(assignmentMapper).insert(assignment);
     }
 
     // ==================== getAssignmentById tests ====================
@@ -508,6 +527,28 @@ class AssignmentServiceTest {
         assertTrue(result.isEmpty());
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void getAssignmentContent_flexibleReadingOnlyListsSelectedScopeAndUsesReadingCompletion() {
+        Assignment assignment = flexibleReadingAssignment(1, 0);
+        Text inner = new Text();
+        inner.setId(101L);
+        inner.setTitle("Inner article");
+        when(assignmentMapper.selectById(1L)).thenReturn(assignment);
+        when(textMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(inner));
+        when(textLearningRecordMapper.selectCompletedAssignmentTextIds(50L, 1L)).thenReturn(List.of(101L));
+
+        Map<String, Object> result = assignmentService.getAssignmentContent(1L, 50L);
+
+        List<Map<String, Object>> texts = (List<Map<String, Object>>) result.get("texts");
+        assertEquals(1, texts.size());
+        assertEquals("INNER", texts.get(0).get("articleType"));
+        assertEquals(Boolean.TRUE, texts.get(0).get("completed"));
+        assertEquals(1, result.get("innerCompletedCount"));
+        assertEquals(0, result.get("outerRequiredCount"));
+        verify(textMapper, times(1)).selectList(any(QueryWrapper.class));
+    }
+
     // ==================== completeAssignment tests ====================
 
     @Test
@@ -699,6 +740,25 @@ class AssignmentServiceTest {
 
         // Assert
         verify(assignmentMapper).insert(any(Assignment.class));
+    }
+
+    private Assignment flexibleReadingAssignment(int innerRequired, int outerRequired) {
+        Assignment assignment = new Assignment();
+        assignment.setId(1L);
+        assignment.setTitle("Flexible reading");
+        assignment.setCreatedBy(100L);
+        AssignmentContent content = new AssignmentContent();
+        content.setType("READING_FLEX");
+        AssignmentContent.ContentConfig config = new AssignmentContent.ContentConfig();
+        config.setInnerRequiredCount(innerRequired);
+        config.setOuterRequiredCount(outerRequired);
+        config.setInnerMode("FREE");
+        config.setOuterMode("FREE");
+        config.setInnerTextIds(Collections.emptyList());
+        config.setOuterTextIds(Collections.emptyList());
+        content.setContent(config);
+        assignment.setAssignmentContent(content);
+        return assignment;
     }
 
 }

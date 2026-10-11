@@ -254,7 +254,7 @@ public class Assignment {
     @JsonIgnore
     public boolean isTextsTask() {
         AssignmentContent content = parseContentFromDescription();
-        return content != null && "TEXTS".equals(content.getType());
+        return content != null && ("TEXTS".equals(content.getType()) || "READING_MIXED".equals(content.getType()));
     }
 
     /**
@@ -272,8 +272,12 @@ public class Assignment {
     @JsonIgnore
     public java.util.List<Long> getTextIds() {
         AssignmentContent content = parseContentFromDescription();
-        if (content != null && content.getContent() != null && "TEXTS".equals(content.getType())) {
-            return content.getContent().getTextIds();
+        if (content != null && content.getContent() != null && ("TEXTS".equals(content.getType()) || "READING_MIXED".equals(content.getType()))) {
+            java.util.List<Long> ids = new java.util.ArrayList<>();
+            if (content.getContent().getTextIds() != null) ids.addAll(content.getContent().getTextIds());
+            if (content.getContent().getInnerTextIds() != null) ids.addAll(content.getContent().getInnerTextIds());
+            if (content.getContent().getOuterTextIds() != null) ids.addAll(content.getContent().getOuterTextIds());
+            return ids.stream().distinct().collect(java.util.stream.Collectors.toList());
         }
         return null;
     }
@@ -288,5 +292,17 @@ public class Assignment {
             return content.getContent().getWordIds();
         }
         return null;
+    }
+
+    @JsonIgnore
+    public boolean isReadingMixedTask() {
+        AssignmentContent content = parseContentFromDescription();
+        return content != null && "READING_MIXED".equals(content.getType());
+    }
+
+    @JsonIgnore
+    public boolean isFlexibleReadingTask() {
+        AssignmentContent content = parseContentFromDescription();
+        return content != null && "READING_FLEX".equals(content.getType());
     }
 }

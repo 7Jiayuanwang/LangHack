@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.english.dto.AssignmentContent;
 import com.english.entity.*;
 import com.english.entity.Class;
 import com.english.mapper.*;
@@ -29,6 +30,12 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     private AssignmentMapper assignmentMapper;
 
     @Autowired
+    private AssignmentStudentMapper assignmentStudentMapper;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
     private TextExerciseMapper textExerciseMapper;
 
     @Autowired
@@ -39,6 +46,9 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
     @Autowired
     private LearningRecordMapper learningRecordMapper;
+
+    @Autowired
+    private TextLearningRecordMapper textLearningRecordMapper;
 
     @Autowired
     private CourseService courseService;
@@ -139,7 +149,11 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     public void createAssignment(Assignment assignment) {
         boolean isTextAssignment = assignment.getAssignmentContent() != null
                 && "TEXTS".equals(assignment.getAssignmentContent().getType());
-        if (assignment.getUnitId() == null && !isTextAssignment) {
+        boolean isFlexibleReading = assignment.getAssignmentContent() != null
+                && "READING_FLEX".equals(assignment.getAssignmentContent().getType());
+        if (assignment.getUnitId() == null && !isTextAssignment
+                && (assignment.getAssignmentContent() == null || (!"READING_MIXED".equals(assignment.getAssignmentContent().getType())
+                    && !isFlexibleReading))) {
             throw new BusinessException("单元ID不能为空");
         }
 
@@ -265,8 +279,13 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         QueryWrapper<Assignment> wrapper = new QueryWrapper<>();
 
         // 防止空集合导致的SQL语法错误
-        if (classIds != null && !classIds.isEmpty()) {
+        List<Long> targetedAssignmentIds = assignmentStudentMapper.selectAssignmentIdsForStudent(studentId);
+        if (classIds != null && !classIds.isEmpty() && targetedAssignmentIds != null && !targetedAssignmentIds.isEmpty()) {
+            wrapper.and(w -> w.in("class_id", classIds).or().in("id", targetedAssignmentIds));
+        } else if (classIds != null && !classIds.isEmpty()) {
             wrapper.in("class_id", classIds);
+        } else if (targetedAssignmentIds != null && !targetedAssignmentIds.isEmpty()) {
+            wrapper.in("id", targetedAssignmentIds);
         } else {
             // 如果没有班级ID，返回空结果
             Map<String, Object> result = new HashMap<>();
@@ -323,8 +342,15 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
             assignmentMap.put("totalWords", assignmentWords.size());
             assignmentMap.put("learnedWords", calculateWordsLearnedInAssignment(assignment.getId(), studentId));
-            assignmentMap.put("totalTexts", assignmentTexts.size());
-            assignmentMap.put("readTexts", calculateTextsReadInAssignment(assignment.getId(), studentId));
+            if (assignment.isFlexibleReadingTask()) {
+                AssignmentContent.ContentConfig cfg = flexibleConfig(assignment);
+                assignmentMap.put("totalTexts", requiredCount(cfg, true) + requiredCount(cfg, false));
+                assignmentMap.put("readTexts", flexibleCompletedCount(assignment.getId(), studentId, true)
+                        + flexibleCompletedCount(assignment.getId(), studentId, false));
+            } else {
+                assignmentMap.put("totalTexts", assignmentTexts.size());
+                assignmentMap.put("readTexts", calculateTextsReadInAssignment(assignment.getId(), studentId));
+            }
             assignmentMap.put("studyTime", calculateStudyTimeInAssignment(assignment.getId(), studentId));
             assignmentMap.put("studyTimeSeconds", calculateStudyTimeSecondsInAssignment(assignment.getId(), studentId));
             assignmentMap.put("assignmentType", getAssignmentType(assignment));
@@ -404,6 +430,42 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         content.put("unitId", assignment.getUnitId());
         content.put("assignmentType", getAssignmentType(assignment));
         content.put("idealStudyTimeMinutes", assignment.getIdealStudyTimeMinutes());
+
+        if (assignment.isFlexibleReadingTask()) {
+            AssignmentContent.ContentConfig cfg = flexibleConfig(assignment);
+            int innerRequired = requiredCount(cfg, true);
+            int outerRequired = requiredCount(cfg, false);
+            List<com.english.entity.Text> innerCandidates = getFlexibleCandidates(assignment, true);
+            List<com.english.entity.Text> outerCandidates = getFlexibleCandidates(assignment, false);
+            Set<Long> completedTextIds = completedFlexibleTextIds(assignmentId, studentId);
+            content.put("innerRequiredCount", innerRequired);
+            content.put("outerRequiredCount", outerRequired);
+            content.put("innerMode", mode(cfg, true));
+            content.put("outerMode", mode(cfg, false));
+            List<Map<String, Object>> textList = new ArrayList<>();
+            for (boolean inner : new boolean[] { true, false }) {
+                int required = inner ? innerRequired : outerRequired;
+                List<com.english.entity.Text> candidates = inner ? innerCandidates : outerCandidates;
+                for (com.english.entity.Text text : candidates) {
+                    boolean completed = completedTextIds.contains(text.getId());
+                    Map<String, Object> textMap = new HashMap<>();
+                    textMap.put("id", text.getId());
+                    textMap.put("title", text.getTitle());
+                    textMap.put("difficulty", text.getDifficulty());
+                    textMap.put("articleType", inner ? "INNER" : "OUTER");
+                    textMap.put("requiredCount", required);
+                    textMap.put("mode", mode(cfg, inner));
+                    textMap.put("viewed", completed);
+                    textMap.put("completed", completed);
+                    textList.add(textMap);
+                }
+            }
+            content.put("texts", textList);
+            content.put("innerCompletedCount", Math.min(innerRequired, countCompletedCandidates(innerCandidates, completedTextIds)));
+            content.put("outerCompletedCount", Math.min(outerRequired, countCompletedCandidates(outerCandidates, completedTextIds)));
+            content.put("words", new ArrayList<>());
+            return content;
+        }
 
         // 获取任务指定的课文和单词
         List<com.english.entity.Text> texts = getAssignmentTexts(assignment);
@@ -563,7 +625,28 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
     @Override
     public boolean isAssignmentInClasses(Long assignmentId, List<Long> classIds) {
         Assignment assignment = getActiveAssignment(assignmentId);
-        return assignment != null && classIds.contains(assignment.getClassId());
+        return assignment != null && classIds != null && classIds.contains(assignment.getClassId());
+    }
+
+    @Override
+    public boolean isAssignmentAccessible(Long assignmentId, Long studentId, List<Long> classIds) {
+        Assignment assignment = getActiveAssignment(assignmentId);
+        if (assignment == null) return false;
+        return (classIds != null && classIds.contains(assignment.getClassId()))
+                || assignmentStudentMapper.countAssignmentForStudent(assignmentId, studentId) > 0;
+    }
+
+    @Override
+    public boolean isTextAllowedForAssignment(Long assignmentId, Long textId) {
+        Assignment assignment = getActiveAssignment(assignmentId);
+        if (assignment == null || textId == null) return false;
+        if (assignment.isFlexibleReadingTask()) {
+            return getFlexibleCandidates(assignment, true).stream().anyMatch(t -> textId.equals(t.getId()))
+                    || getFlexibleCandidates(assignment, false).stream().anyMatch(t -> textId.equals(t.getId()));
+        }
+        List<Long> ids = assignment.getTextIds();
+        if (ids != null && !ids.isEmpty()) return ids.contains(textId);
+        return getAssignmentTexts(assignment).stream().anyMatch(t -> textId.equals(t.getId()));
     }
 
     /**
@@ -597,6 +680,20 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
 
         // 根据任务类型计算进度
         String assignmentType = getAssignmentType(assignment);
+
+        if ("READING_FLEX".equals(assignmentType)) {
+            AssignmentContent.ContentConfig cfg = flexibleConfig(assignment);
+            int innerRequired = requiredCount(cfg, true);
+            int outerRequired = requiredCount(cfg, false);
+            int requiredTotal = innerRequired + outerRequired;
+            if (requiredTotal <= 0) return 100.0;
+            Set<Long> completedTextIds = completedFlexibleTextIds(assignmentId, studentId);
+            int innerCompleted = Math.min(innerRequired,
+                    countCompletedCandidates(getFlexibleCandidates(assignment, true), completedTextIds));
+            int outerCompleted = Math.min(outerRequired,
+                    countCompletedCandidates(getFlexibleCandidates(assignment, false), completedTextIds));
+            return Math.min(100.0, (innerCompleted + outerCompleted) * 100.0 / requiredTotal);
+        }
 
         // 计算课文学习进度
         double textProgress = 0.0;
@@ -683,6 +780,14 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         List<com.english.entity.Text> texts = getAssignmentTexts(assignment);
 
         switch (assignmentType) {
+            case "READING_FLEX": {
+                AssignmentContent.ContentConfig cfg = flexibleConfig(assignment);
+                int innerRequired = requiredCount(cfg, true);
+                int outerRequired = requiredCount(cfg, false);
+                Set<Long> completedTextIds = completedFlexibleTextIds(assignmentId, studentId);
+                return countCompletedCandidates(getFlexibleCandidates(assignment, true), completedTextIds) >= innerRequired
+                        && countCompletedCandidates(getFlexibleCandidates(assignment, false), completedTextIds) >= outerRequired;
+            }
             case "TEXTS":
                 // 课文任务：需要每篇课文都达到足够的阅读时间并且完成习题
                 if (texts.isEmpty()) {
@@ -1026,22 +1131,27 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
             return new ArrayList<>();
         }
 
-        // 获取班级中的所有学生
-        List<StudentClass> studentClasses = studentClassService.getStudentsByClassId(assignment.getClassId());
+        // 定向作业使用 assignment_students；传统班级作业仍按班级取学生
+        List<StudentClass> studentClasses = assignment.getClassId() != null
+                ? studentClassService.getStudentsByClassId(assignment.getClassId()) : new ArrayList<>();
+        List<Long> targetedStudentIds = assignment.getClassId() == null
+                ? assignmentStudentMapper.selectStudentIds(assignmentId) : new ArrayList<>();
         List<Map<String, Object>> progressList = new ArrayList<>();
 
-        for (StudentClass studentClass : studentClasses) {
-            Long studentId = studentClass.getStudentId();
+        List<Long> progressStudentIds = assignment.getClassId() != null
+                ? studentClasses.stream().map(StudentClass::getStudentId).collect(Collectors.toList()) : targetedStudentIds;
+        for (Long studentId : progressStudentIds) {
+            StudentClass studentClass = assignment.getClassId() != null
+                    ? studentClasses.stream().filter(sc -> studentId.equals(sc.getStudentId())).findFirst().orElse(null) : null;
+            User targetUser = studentClass != null ? studentClass.getStudent() : userMapper.selectById(studentId);
             Map<String, Object> studentProgress = new HashMap<>();
 
             // 基本信息
             studentProgress.put("studentId", studentId);
             studentProgress.put("username",
-                    studentClass.getStudent() != null ? studentClass.getStudent().getUsername() : "未知");
-            studentProgress.put("realName", studentClass.getStudent() != null
-                    ? (studentClass.getStudent().getRealName() != null
-                        ? studentClass.getStudent().getRealName()
-                        : studentClass.getStudent().getNickname())
+                    targetUser != null ? targetUser.getUsername() : "未知");
+            studentProgress.put("realName", targetUser != null
+                    ? (targetUser.getRealName() != null ? targetUser.getRealName() : targetUser.getNickname())
                     : "未知");
 
             // 计算学习进度
@@ -1100,6 +1210,9 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
      * 获取任务类型
      */
     private String getAssignmentType(Assignment assignment) {
+        if (assignment.isFlexibleReadingTask()) {
+            return "READING_FLEX";
+        }
         if (assignment.isTextsTask()) {
             return "TEXTS";
         } else if (assignment.isWordsTask()) {
@@ -1128,6 +1241,62 @@ public class AssignmentServiceImpl extends ServiceImpl<AssignmentMapper, Assignm
         }
 
         return new ArrayList<>();
+    }
+
+    private AssignmentContent.ContentConfig flexibleConfig(Assignment assignment) {
+        AssignmentContent content = assignment.parseContentFromDescription();
+        return content == null ? null : content.getContent();
+    }
+
+    private int requiredCount(AssignmentContent.ContentConfig cfg, boolean inner) {
+        if (cfg == null) return inner ? 2 : 1;
+        Integer value = inner ? cfg.getInnerRequiredCount() : cfg.getOuterRequiredCount();
+        return value == null ? (inner ? 2 : 1) : Math.max(0, value);
+    }
+
+    private String mode(AssignmentContent.ContentConfig cfg, boolean inner) {
+        if (cfg == null) return "FREE";
+        String value = inner ? cfg.getInnerMode() : cfg.getOuterMode();
+        return value == null || value.isBlank() ? "FREE" : value.toUpperCase(Locale.ROOT);
+    }
+
+    private List<com.english.entity.Text> getFlexibleCandidates(Assignment assignment, boolean inner) {
+        AssignmentContent.ContentConfig cfg = flexibleConfig(assignment);
+        if (cfg == null) return new ArrayList<>();
+        if (requiredCount(cfg, inner) <= 0) return new ArrayList<>();
+        List<Long> specified = inner ? cfg.getInnerTextIds() : cfg.getOuterTextIds();
+        if ("SPECIFIED".equals(mode(cfg, inner)) && specified != null && !specified.isEmpty()) {
+            QueryWrapper<com.english.entity.Text> wrapper = new QueryWrapper<>();
+            wrapper.select("id", "title", "difficulty", "article_type")
+                    .in("id", specified).eq("deleted", 0)
+                    .in("status", "APPROVED", "PUBLISHED")
+                    .eq("article_type", inner ? "INNER" : "OUTER");
+            return textMapper.selectList(wrapper);
+        }
+        QueryWrapper<com.english.entity.Text> wrapper = new QueryWrapper<>();
+        wrapper.select("id", "title", "difficulty", "article_type")
+                .eq("deleted", 0)
+                .in("status", "APPROVED", "PUBLISHED")
+                .eq("article_type", inner ? "INNER" : "OUTER");
+        if (!inner) wrapper.eq("is_public", 1);
+        wrapper.orderByDesc("is_featured").orderByDesc("created_time");
+        return textMapper.selectList(wrapper);
+    }
+
+    private Set<Long> completedFlexibleTextIds(Long assignmentId, Long studentId) {
+        List<Long> ids = textLearningRecordMapper.selectCompletedAssignmentTextIds(studentId, assignmentId);
+        return ids == null ? Collections.emptySet() : new HashSet<>(ids);
+    }
+
+    private int countCompletedCandidates(List<com.english.entity.Text> candidates, Set<Long> completedTextIds) {
+        return (int) candidates.stream().map(com.english.entity.Text::getId).filter(completedTextIds::contains).count();
+    }
+
+    private int flexibleCompletedCount(Long assignmentId, Long studentId, boolean inner) {
+        Assignment assignment = getActiveAssignment(assignmentId);
+        if (assignment == null) return 0;
+        return countCompletedCandidates(getFlexibleCandidates(assignment, inner),
+                completedFlexibleTextIds(assignmentId, studentId));
     }
 
     /**

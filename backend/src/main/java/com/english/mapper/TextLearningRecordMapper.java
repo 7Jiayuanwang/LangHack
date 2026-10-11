@@ -27,6 +27,11 @@ public interface TextLearningRecordMapper extends BaseMapper<TextLearningRecord>
     @Select("SELECT COUNT(DISTINCT text_id) FROM text_learning_records WHERE student_id = #{studentId} AND is_completed = 1")
     long countDistinctCompletedTexts(@Param("studentId") Long studentId);
 
+    @Select("SELECT DISTINCT text_id FROM text_learning_records " +
+            "WHERE student_id = #{studentId} AND assignment_id = #{assignmentId} AND is_completed = 1")
+    List<Long> selectCompletedAssignmentTextIds(@Param("studentId") Long studentId,
+                                                @Param("assignmentId") Long assignmentId);
+
     /**
      * 分页获取按文章去重的阅读记录（按最近阅读时间排序）
      * 返回每篇文章的聚合统计：阅读次数、总时长、是否完成、最后阅读时间

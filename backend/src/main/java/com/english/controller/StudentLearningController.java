@@ -1038,10 +1038,14 @@ public class StudentLearningController {
         // 如果有 assignmentId，校验学生是否有权访问该任务
         if (assignmentId != null) {
             List<Long> classIds = studentClassesService.getClassIdsByStudentId(studentId);
-            if (classIds == null || classIds.isEmpty()
-                    || !assignmentService.isAssignmentInClasses(assignmentId, classIds)) {
+            if (!assignmentService.isAssignmentAccessible(assignmentId, studentId, classIds)) {
                 throw new BusinessException("无权访问该任务");
             }
+            if (textId != null && !assignmentService.isTextAllowedForAssignment(assignmentId, textId)) {
+                throw new BusinessException("该课文不属于当前作业可选范围");
+            }
+            // 作业已同时校验学生归属和文章范围，允许学生访问范围内的候选文章。
+            if (textId != null) return;
         }
 
         // 如果有 textId，校验课文属于学生可访问的课程

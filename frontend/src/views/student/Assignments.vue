@@ -260,10 +260,11 @@
       <div class="assignment-detail">
         <div class="detail-header">
           <div class="assignment-info">
-            <p><strong>班级：</strong>{{ currentAssignment.className }}</p>
-            <p><strong>单元：</strong>{{ currentAssignment.unitName }}</p>
+            <p v-if="currentAssignment.assignmentType !== 'READING_FLEX'"><strong>班级：</strong>{{ currentAssignment.className }}</p>
+            <p v-if="currentAssignment.assignmentType !== 'READING_FLEX'"><strong>单元：</strong>{{ currentAssignment.unitName }}</p>
             <p><strong>任务类型：</strong>{{ getAssignmentTypeText(currentAssignment.assignmentType) }}</p>
-            <p><strong>完成标准：</strong>{{ getCompletionCriteriaText(currentAssignment.assignmentType) }}</p>
+            <p><strong>完成标准：</strong>{{ getCompletionCriteriaText(currentAssignment) }}</p>
+            <p v-if="currentAssignment.assignmentType === 'READING_FLEX'"><strong>完成进度：</strong>{{ getFlexibleProgressText(currentAssignment) }}</p>
             <p><strong>截止时间：</strong>{{ formatTime(currentAssignment.deadline) }}</p>
             <p v-if="getAssignmentDescription(currentAssignment)"><strong>任务描述：</strong>{{ getAssignmentDescription(currentAssignment) }}</p>
           </div>
@@ -292,7 +293,7 @@
           <el-tabs type="border-card" v-model="activeTab">
              <!-- 根据任务类型动态显示课文标签 -->
                   <el-tab-pane
-                  v-if="currentAssignment.assignmentType === 'UNIT' || currentAssignment.assignmentType === 'TEXTS'"
+                  v-if="currentAssignment.assignmentType === 'UNIT' || currentAssignment.assignmentType === 'TEXTS' || currentAssignment.assignmentType === 'READING_FLEX'"
                   label="课文学习"
                   name="texts"
                 >
@@ -309,12 +310,16 @@
                     <el-tag v-if="currentAssignment.assignmentType === 'TEXTS'" :type="isAssignmentTextTimeCompleted(text.studyTime, text.studyTimeSeconds) ? 'success' : 'warning'" size="small">
                       {{ isAssignmentTextTimeCompleted(text.studyTime, text.studyTimeSeconds) ? '已达标' : '学习中' }}
                     </el-tag>
+                    <el-tag v-else-if="currentAssignment.assignmentType === 'READING_FLEX'" :type="text.completed ? 'success' : 'info'" size="small">
+                      {{ text.articleType === 'INNER' ? '课内' : '课外' }} · {{ text.completed ? '已完成' : '去学习' }}
+                    </el-tag>
                     <el-tag v-else-if="text.completed" type="success" size="small">已完成</el-tag>
                     <el-tag v-else type="info" size="small">未学习</el-tag>
                   </div>
                   <div class="item-meta">
                     <span>难度：{{ getDifficultyText(text.difficulty) }}</span>
-                    <span>学习时间：{{ formatAssignmentTextTime(text, currentAssignment.assignmentType) }}</span>
+                    <span v-if="currentAssignment.assignmentType === 'READING_FLEX'">范围内自由选择</span>
+                    <span v-else>学习时间：{{ formatAssignmentTextTime(text, currentAssignment.assignmentType) }}</span>
                   </div>
                 </div>
               </div>
@@ -703,7 +708,7 @@ const viewAssignmentDetail = async (assignment) => {
       await loadAssignmentContent(assignment.id)
 
       // 设置默认激活的标签页
-      if (currentAssignment.value.assignmentType === 'UNIT' || currentAssignment.value.assignmentType === 'TEXTS') {
+      if (currentAssignment.value.assignmentType === 'UNIT' || currentAssignment.value.assignmentType === 'TEXTS' || currentAssignment.value.assignmentType === 'READING_FLEX') {
         activeTab.value = 'texts' // 默认显示课文学习标签页
       } else if (currentAssignment.value.assignmentType === 'WORDS') {
         activeTab.value = 'words' // 单词任务默认显示单词学习标签页
@@ -768,6 +773,14 @@ const loadAssignmentContent = async (assignmentId) => {
       currentAssignment.value.words = Array.isArray(contentData.words) ? contentData.words : []
       currentAssignment.value.assignmentType = contentData.assignmentType || currentAssignment.value.assignmentType
       currentAssignment.value.idealStudyTimeMinutes = contentData.idealStudyTimeMinutes || currentAssignment.value.idealStudyTimeMinutes || 10
+      if (contentData.assignmentType === 'READING_FLEX') {
+        currentAssignment.value.innerRequiredCount = contentData.innerRequiredCount ?? 2
+        currentAssignment.value.outerRequiredCount = contentData.outerRequiredCount ?? 1
+        currentAssignment.value.innerCompletedCount = contentData.innerCompletedCount ?? 0
+        currentAssignment.value.outerCompletedCount = contentData.outerCompletedCount ?? 0
+        currentAssignment.value.innerMode = contentData.innerMode
+        currentAssignment.value.outerMode = contentData.outerMode
+      }
 
       // 同时加载学习记录
       await loadAssignmentRecords(assignmentId)
@@ -1039,18 +1052,35 @@ const getAssignmentTypeText = (assignmentType) => {
   const types = {
     'UNIT': '整个单元',
     'TEXTS': '指定课文',
-    'WORDS': '指定单词'
+    'WORDS': '指定单词',
+    'READING_FLEX': '自由阅读作业'
   }
   return types[assignmentType] || '未知类型'
 }
 
-const getCompletionCriteriaText = (assignmentType) => {
+const getCompletionCriteriaText = (assignment) => {
+  const assignmentType = assignment?.assignmentType
   const criteria = {
     'UNIT': '课文和单词均需达到80%进度',
     'TEXTS': `每篇课文需学习至少${requiredTextTimeMinutes()}分钟`,
     'WORDS': '需要掌握所有指定单词'
   }
+  if (assignmentType === 'READING_FLEX') {
+    const inner = assignment.innerRequiredCount ?? 0
+    const outer = assignment.outerRequiredCount ?? 0
+    if (inner > 0 && outer > 0) return `课内任选 ${inner} 篇，课外任选 ${outer} 篇，完成阅读即可`
+    return inner > 0 ? `课内任选 ${inner} 篇，完成阅读即可` : `课外任选 ${outer} 篇，完成阅读即可`
+  }
   return criteria[assignmentType] || '未知完成标准'
+}
+
+const getFlexibleProgressText = (assignment) => {
+  const innerRequired = assignment.innerRequiredCount ?? 0
+  const outerRequired = assignment.outerRequiredCount ?? 0
+  const parts = []
+  if (innerRequired > 0) parts.push(`课内 ${assignment.innerCompletedCount ?? 0}/${innerRequired}`)
+  if (outerRequired > 0) parts.push(`课外 ${assignment.outerCompletedCount ?? 0}/${outerRequired}`)
+  return parts.join('，')
 }
 
 const formatTime = (time) => {
@@ -1069,8 +1099,7 @@ const getAssignmentDescription = (assignment) => {
     const parsed = JSON.parse(desc)
     // 如果是JSON对象，返回空字符串或尝试提取描述
     if (typeof parsed === 'object') {
-      // 如果是AssignmentContent格式，返回空（因为任务类型已经显示了）
-      return ''
+      return parsed.note || ''
     }
     return desc
   } catch (e) {

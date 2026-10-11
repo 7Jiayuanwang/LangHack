@@ -313,7 +313,7 @@ public class StudentAssignmentController {
             java.util.List<Long> studentClassIds = studentClassesService.getClassIdsByStudentId(studentId);
 
             // 检查任务是否属于学生加入的班级
-            return assignmentsService.isAssignmentInClasses(assignmentId, studentClassIds);
+            return assignmentsService.isAssignmentAccessible(assignmentId, studentId, studentClassIds);
         } catch (com.english.exception.BusinessException e) {
             // 业务异常：用户不存在、班级不存在等，安全地拒绝访问
             logger.debug("权限检查业务异常: {}", e.getMessage());

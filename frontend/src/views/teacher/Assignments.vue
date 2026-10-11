@@ -13,6 +13,7 @@
           </div>
           <div class="header-actions">
             <el-button size="small" @click="openTemplateManager">管理模板</el-button>
+            <el-button size="small" type="success" @click="router.push('/teacher/reading-assignments')">自由阅读作业</el-button>
             <el-button type="primary" @click="showCreateDialog">布置任务</el-button>
           </div>
         </div>
@@ -524,11 +525,13 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import { getAuthHeader } from '@/utils/auth'
 import TaskPlans from './TaskPlans.vue'
 import XyPageHeader from '@/components/ui/XyPageHeader.vue'
 
 const activeTab = ref('assignments')
+const router = useRouter()
 
 // 响应式数据
 const loading = ref(false)

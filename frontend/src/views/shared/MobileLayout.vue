@@ -202,6 +202,7 @@ const theme = computed(() => THEME[props.role])
 
 const NAV_ITEMS = {
   teacher: [
+    { path: '/teacher/reading-assignments', label: '布置', icon: Edit, badge: null },
     { path: '/teacher/dashboard',        label: '首页', icon: DataBoard, badge: null },
     { path: '/teacher/classes',          label: '班级', icon: School,    badge: null },
     { path: '/teacher/assignments',      label: '任务', icon: Edit,      badge: null },

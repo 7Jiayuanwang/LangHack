@@ -35,3 +35,15 @@ export function getClassLearningOverview(classId) {
 export function getMyPlatformClasses(page = 1) {
   return request({ url: '/api/classes', method: 'get', params: { page, size: 100 }, skipErrorHandler: true })
 }
+
+export function getReadingAssignmentStudents(classId) {
+  return request({ url: '/api/teacher/reading-assignments/students', method: 'get', params: { classId } })
+}
+
+export function getReadingAssignments() {
+  return request({ url: '/api/teacher/reading-assignments', method: 'get' })
+}
+
+export function createReadingAssignment(data) {
+  return request({ url: '/api/teacher/reading-assignments', method: 'post', data })
+}

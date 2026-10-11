@@ -96,6 +96,11 @@ public interface AssignmentService extends IService<Assignment> {
      */
     boolean isAssignmentInClasses(Long assignmentId, List<Long> classIds);
 
+    boolean isAssignmentAccessible(Long assignmentId, Long studentId, List<Long> classIds);
+
+    /** Whether a text is an allowed candidate for this assignment. */
+    boolean isTextAllowedForAssignment(Long assignmentId, Long textId);
+
     // ========== 教师端进度统计相关 ==========
 
     /**

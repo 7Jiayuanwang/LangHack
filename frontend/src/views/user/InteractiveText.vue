@@ -170,6 +170,7 @@ let accumulatedTime = 0 // 累计学习时间（秒）
 let lastSavedStudyTime = 0 // 已保存到后端的学习时间（秒），用于计算增量避免重复累加
 let heartbeatTimer = null
 const HEARTBEAT_INTERVAL = 30 * 1000 // 30 秒自动上报一次，防止页面意外关闭丢失全部时间
+let saveInFlight = false
 const REQUIRED_STUDY_TIME = 10 * 60 * 1000 // 10分钟，毫秒
 
 // 计算属性
@@ -241,12 +242,13 @@ const loadTextDetail = async () => {
         ElMessage.info('正在完成任务中的课文学习')
       }
 
-      // 恢复已学习时长（转换为秒）
-      if (data?.readTime && data.readTime > 0) {
-        studyTime.value = data.readTime
-        accumulatedTime = data.readTime // 将已学习时长作为累计时间
+      // 后端 readTime 是分钟；readTimeSeconds 用于阅读计时（兼容旧响应）。
+      const savedSeconds = Number(data?.readTimeSeconds ?? ((data?.readTime || 0) * 60))
+      if (savedSeconds > 0) {
+        studyTime.value = savedSeconds
+        accumulatedTime = savedSeconds
         // 已保存的时长不应再次发送，同步 lastSavedStudyTime 避免首次保存重复累加
-        lastSavedStudyTime = data.readTime
+        lastSavedStudyTime = savedSeconds
       } else {
         // 确保初始值为0
         studyTime.value = 0
@@ -337,6 +339,8 @@ const pauseReading = async () => {
 }
 
 const saveLearningRecord = async () => {
+  if (saveInFlight) return
+  saveInFlight = true
   try {
     // heartbeat 调用时 studyTime 可能还没被 100ms 定时器刷新，手动同步一次
     if (recording.value && studyStartTime) {
@@ -360,6 +364,8 @@ const saveLearningRecord = async () => {
     }
   } catch (error) {
     console.error('保存学习记录失败:', error)
+  } finally {
+    saveInFlight = false
   }
 }
 
@@ -375,6 +381,9 @@ const startStudyTimer = () => {
       const currentSessionTime = Math.floor((Date.now() - studyStartTime) / 1000)
       const totalTime = accumulatedTime + currentSessionTime
       studyTime.value = totalTime
+      if (totalTime - lastSavedStudyTime >= 10) {
+        void saveLearningRecord()
+      }
     }
   }, 100) // 每100毫秒更新一次，提供更平滑的体验
 
