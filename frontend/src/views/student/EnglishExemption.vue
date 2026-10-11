@@ -73,15 +73,57 @@ const cet4Scores = [['497–524 分', '80 分'], ['525–574 分', '85 分'], ['
 const cet6Scores = [['425–459 分', '80 分'], ['460–499 分', '85 分'], ['500–549 分', '90 分'], ['550–599 分', '95 分'], ['≥ 600 分', '100 分']]
 const ieltsScores = [['6.0 分', '80 分'], ['6.5 分', '85 分'], ['7.0 分', '90 分'], ['7.5 分', '95 分'], ['≥ 8.0 分', '100 分']]
 const toeflScores = [['68–79 分', '80 分'], ['80–91 分', '85 分'], ['92–102 分', '90 分'], ['103–112 分', '95 分'], ['≥ 113 分', '100 分']]
-const application = ref(null); const submitting = ref(false); const errorMessage = ref(''); const proofName = ref(''); const proofFile = ref(null)
+const application = ref(null)
+const submitting = ref(false)
+const errorMessage = ref('')
+const proofName = ref('')
+const proofFile = ref(null)
 const form = reactive({ name: '', studentNo: '', college: '', major: '', grade: '', phone: '', email: '', courses: [], mode: '', certificate: '', score: '', examDate: '', reason: '', committed: false })
 const statusText = computed(() => ({ PENDING: '等待审核', APPROVED: '审核通过', REJECTED: '审核未通过' }[application.value?.status] || application.value?.status || '已提交'))
 const examTypeMap = { '大学英语四级 CET-4': 'CET4', '大学英语六级 CET-6': 'CET6', '雅思 IELTS': 'IELTS', '托福 TOEFL': 'TOEFL' }
 const needsExamDate = computed(() => ['雅思 IELTS', '托福 TOEFL'].includes(form.certificate))
-function selectFile(event) { proofFile.value = event.target.files?.[0] || null; proofName.value = proofFile.value?.name || '' }
-async function loadApplication() { const response = await getMyEnglishExemptionApplication(); application.value = response?.data || null }
-function makeRemark() { return [`姓名：${form.name}`, `学号：${form.studentNo}`, `学院：${form.college}`, `专业：${form.major || '未填写'}`, `年级：${form.grade}`, `电话：${form.phone}`, `邮箱：${form.email || '未填写'}`, `申请理由：${form.reason || '未填写'}`].join('\n') }
-async function submitApplication() { errorMessage.value = ''; if (!form.name || !form.studentNo || !form.college || !form.grade || !form.phone || !form.courses.length || !form.mode || !form.certificate || !form.score || !proofFile.value || !form.committed || (needsExamDate.value && !form.examDate)) { ElMessage.warning('请完成所有必填信息、上传证明并确认承诺'); return }; submitting.value = true; try { const mediaType = proofFile.value.type === 'application/pdf' ? 'DOCUMENT' : 'IMAGE'; const uploadResponse = await uploadMedia(proofFile.value, mediaType); const uploaded = uploadResponse?.data; if (!uploaded?.url && !uploaded?.mediaId) throw new Error(uploadResponse?.message || '证明材料上传失败'); const certificateUrl = uploaded.url || `/api/media/${uploaded.mediaId}/download`; const response = await submitEnglishExemptionApplication({ courseName: form.courses.join('、'), applyType: form.mode === '免修免考' ? 'EXEMPT_FULL' : 'EXEMPT_WITH_EXAM', examType: examTypeMap[form.certificate], examScore: form.score, examDate: needsExamDate.value ? form.examDate : null, certificateUrl, studentRemark: makeRemark() }); application.value = response.data; ElMessage.success('申请已提交，任课教师将收到审核通知') } catch (error) { errorMessage.value = error?.response?.data?.message || error?.message || '申请提交失败，请稍后重试。' } finally { submitting.value = false } }
+function selectFile(event) {
+  proofFile.value = event.target.files?.[0] || null
+  proofName.value = proofFile.value?.name || ''
+}
+async function loadApplication() {
+  const response = await getMyEnglishExemptionApplication()
+  application.value = response?.data || null
+}
+function makeRemark() {
+  return ['姓名：' + form.name, '学号：' + form.studentNo, '学院：' + form.college, '专业：' + (form.major || '未填写'), '年级：' + form.grade, '电话：' + form.phone, '邮箱：' + (form.email || '未填写'), '申请理由：' + (form.reason || '未填写')].join('\n')
+}
+async function submitApplication() {
+  errorMessage.value = ''
+  if (!form.name || !form.studentNo || !form.college || !form.grade || !form.phone || !form.courses.length || !form.mode || !form.certificate || !form.score || !proofFile.value || !form.committed || (needsExamDate.value && !form.examDate)) {
+    ElMessage.warning('请完成所有必填信息、上传证明并确认承诺')
+    return
+  }
+  submitting.value = true
+  try {
+    const proofExtension = (proofFile.value.name.split('.').pop() || '').toLowerCase()
+    const mediaType = proofExtension === 'pdf' || proofFile.value.type === 'application/pdf' ? 'DOCUMENT' : 'IMAGE'
+    const uploadResponse = await uploadMedia(proofFile.value, mediaType)
+    const uploaded = uploadResponse?.data
+    if (!uploaded?.url && !uploaded?.mediaId) throw new Error(uploadResponse?.message || '证明材料上传失败')
+    const certificateUrl = uploaded.url || ('/api/media/' + uploaded.mediaId + '/download')
+    const response = await submitEnglishExemptionApplication({
+      courseName: form.courses.join('、'),
+      applyType: form.mode === '免修免考' ? 'EXEMPT_FULL' : 'EXEMPT_WITH_EXAM',
+      examType: examTypeMap[form.certificate],
+      examScore: form.score,
+      examDate: needsExamDate.value ? form.examDate : null,
+      certificateUrl,
+      studentRemark: makeRemark()
+    })
+    application.value = response.data
+    ElMessage.success('申请已提交，任课教师将收到审核通知')
+  } catch (error) {
+    errorMessage.value = error?.response?.data?.message || error?.message || '申请提交失败，请稍后重试。'
+  } finally {
+    submitting.value = false
+  }
+}
 onMounted(() => loadApplication().catch(() => {}))
 </script>
 

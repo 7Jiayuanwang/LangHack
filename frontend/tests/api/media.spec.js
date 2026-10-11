@@ -44,6 +44,24 @@ describe('Media API', () => {
       await expect(uploadMedia(file, 'IMAGE'))
         .rejects.toThrow('不支持的文件类型')
     })
+
+    it('accepts PDF with generic MIME from mobile browsers', async () => {
+      const file = new File(['pdf'], 'cet-score.pdf', { type: 'application/octet-stream' })
+      await uploadMedia(file, 'DOCUMENT')
+
+      expect(mockRequest).toHaveBeenCalledTimes(1)
+      const formData = mockRequest.mock.calls[0][0].data
+      expect(formData.get('mediaType')).toBe('DOCUMENT')
+      expect(formData.get('file').name).toBe('cet-score.pdf')
+    })
+
+    it('accepts whitelisted image extension with generic mobile MIME', async () => {
+      const file = new File(['jpg'], 'cet-score.jpg', { type: 'application/octet-stream' })
+      await uploadMedia(file, 'IMAGE')
+
+      expect(mockRequest).toHaveBeenCalledTimes(1)
+      expect(mockRequest.mock.calls[0][0].data.get('mediaType')).toBe('IMAGE')
+    })
   })
 
   describe('getMediaDetail', () => {
