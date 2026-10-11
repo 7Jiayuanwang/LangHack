@@ -152,7 +152,7 @@ import {
   Upload, Document, House,
   User, EditPen, Setting,
   DataLine, FolderOpened, Connection, Refresh, Switch, Coin, Notebook,
-  VideoPlay, ChatLineRound, DataAnalysis, Trophy,
+  VideoPlay, ChatLineRound, DataAnalysis, Trophy, Stamp,
 } from '@element-plus/icons-vue'
 import { getReviewTexts, getReviewVideos } from '@/api/admin'
 
@@ -204,6 +204,7 @@ const NAV_ITEMS = {
   teacher: [
     { path: '/teacher/reading-assignments', label: '布置', icon: Edit, badge: null },
     { path: '/teacher/dashboard',        label: '首页', icon: DataBoard, badge: null },
+    { path: '/teacher/exemption-approvals', label: '免修审批', icon: Stamp, badge: null },
     { path: '/teacher/classes',          label: '班级', icon: School,    badge: null },
     { path: '/teacher/assignments',      label: '任务', icon: Edit,      badge: null },
     { path: '/teacher/texts',            label: '课文', icon: Reading,   badge: null },
@@ -311,6 +312,7 @@ const isManagementRouteActive = computed(() => {
 const ROUTE_MAP = {
   teacher: {
     '/teacher/dashboard':   '教学首页',
+    '/teacher/exemption-approvals': '免修审批',
     '/teacher/classes':     '班级管理',
     '/teacher/assignments': '任务管理',
     '/teacher/my-courses':  '我的授课',
