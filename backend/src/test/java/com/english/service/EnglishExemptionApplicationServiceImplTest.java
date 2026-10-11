@@ -2,11 +2,13 @@ package com.english.service;
 
 import com.english.dto.EnglishExemptionApplicationRequest;
 import com.english.entity.CourseExemptionApplication;
+import com.english.entity.CourseExemptionReviewer;
 import com.english.entity.Notification;
 import com.english.entity.TeacherStudentBinding;
 import com.english.entity.User;
 import com.english.exception.BusinessException;
 import com.english.mapper.CourseExemptionApplicationMapper;
+import com.english.mapper.CourseExemptionReviewerMapper;
 import com.english.mapper.NotificationMapper;
 import com.english.mapper.SchoolStudentMapper;
 import com.english.mapper.TeacherStudentBindingMapper;
@@ -35,6 +37,7 @@ import static org.mockito.Mockito.when;
 class EnglishExemptionApplicationServiceImplTest {
 
     @Mock private CourseExemptionApplicationMapper applicationMapper;
+    @Mock private CourseExemptionReviewerMapper reviewerMapper;
     @Mock private NotificationMapper notificationMapper;
     @Mock private TeacherStudentBindingMapper teacherStudentBindingMapper;
     @Mock private SchoolStudentMapper schoolStudentMapper;
@@ -66,6 +69,10 @@ class EnglishExemptionApplicationServiceImplTest {
 
         assertEquals(101L, submitted.getId());
         assertEquals("PENDING", submitted.getStatus());
+        ArgumentCaptor<CourseExemptionReviewer> reviewerCaptor = ArgumentCaptor.forClass(CourseExemptionReviewer.class);
+        verify(reviewerMapper).insert(reviewerCaptor.capture());
+        assertEquals(101L, reviewerCaptor.getValue().getApplicationId());
+        assertEquals(teacher.getId(), reviewerCaptor.getValue().getTeacherId());
         ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
         verify(notificationMapper).insert(notificationCaptor.capture());
         Notification notification = notificationCaptor.getValue();
@@ -87,6 +94,7 @@ class EnglishExemptionApplicationServiceImplTest {
 
         assertThrows(BusinessException.class, () -> service.submit(student, request));
         verify(applicationMapper, never()).insert(any(CourseExemptionApplication.class));
+        verify(reviewerMapper, never()).insert(any(CourseExemptionReviewer.class));
         verify(notificationMapper, never()).insert(any(Notification.class));
     }
 
