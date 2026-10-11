@@ -77,7 +77,15 @@ VALUES
   (42, '50', 'task plan system',                               'SQL', 'V50__task_plan_system.sql',                               NULL, 'admin', NOW(), 0, 1),
   (43, '51', 'task plan enhancements',                         'SQL', 'V51__task_plan_enhancements.sql',                         NULL, 'admin', NOW(), 0, 1),
   (44, '52', 'past paper attempts',                            'SQL', 'V52__past_paper_attempts.sql',                            NULL, 'admin', NOW(), 0, 1),
-  (45, '53', 'assignment templates',                           'SQL', 'V53__assignment_templates.sql',                           NULL, 'admin', NOW(), 0, 1);
+  (45, '53', 'assignment templates',                           'SQL', 'V53__assignment_templates.sql',                           NULL, 'admin', NOW(), 0, 1),
+  (46, '54', 'learning agent context',                         'SQL', 'V54__learning_agent_context.sql',                         NULL, 'admin', NOW(), 0, 1),
+  (47, '55', 'fix duplicate words',                            'SQL', 'V55__fix_duplicate_words.sql',                            NULL, 'admin', NOW(), 0, 1),
+  (48, '56', 'learner review tasks',                           'SQL', 'V56__learner_review_tasks.sql',                           NULL, 'admin', NOW(), 0, 1),
+  (49, '57', 'article learning insights',                      'SQL', 'V57__article_learning_insights.sql',                      NULL, 'admin', NOW(), 0, 1),
+  (50, '58', 'xiaoya external learning',                       'SQL', 'V58__xiaoya_external_learning.sql',                       NULL, 'admin', NOW(), 0, 1),
+  (51, '59', 'past paper ai grading',                          'SQL', 'V59__past_paper_ai_grading.sql',                          NULL, 'admin', NOW(), 0, 1),
+  (52, '60', 'fix past paper data',                            'SQL', 'V60__fix_past_paper_data.sql',                            NULL, 'admin', NOW(), 0, 1),
+  (53, '61', 'targeted reading assignments',                   'SQL', 'V61__targeted_reading_assignments.sql',                   NULL, 'admin', NOW(), 0, 1);
 
 SELECT CONCAT('✅ Flyway 历史表初始化完成，共 ', COUNT(*), ' 条记录（含 baseline）') AS result
 FROM `flyway_schema_history`;
