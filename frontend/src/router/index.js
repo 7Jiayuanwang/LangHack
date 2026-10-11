@@ -333,7 +333,8 @@ const routes = [
         path: "exemption-approvals",
         name: "TeacherExemptionApprovals",
         component: () => import("@/views/teacher/ExemptionApprovals.vue"),
-        meta: { title: "免修审批", roles: ["TEACHER"] },
+        // standalone: 本页为独立工作台 UI，隐藏教师端公共标题栏与底部导航
+        meta: { title: "免修审批", roles: ["TEACHER"], standalone: true },
       },
       {
         path: "classes",

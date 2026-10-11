@@ -3,6 +3,9 @@
     <!-- 独立工作台式页头：标题与筛选计数器一体 -->
     <section class="hero">
       <div class="hero-text">
+        <button class="hero-back" @click="goBack">
+          <el-icon><ArrowLeft /></el-icon><span>返回首页</span>
+        </button>
         <div class="hero-eyebrow">EXEMPTION APPROVAL</div>
         <h1 class="hero-title">免修审批</h1>
         <div class="hero-desc">大学英语课程免修 / 免考申请审批 · 内农大教字〔2025〕18 号</div>
@@ -314,12 +317,16 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ChatDotRound, Collection, Document, Link, Stamp, View } from '@element-plus/icons-vue'
+import { ChatDotRound, Collection, Document, Link, Stamp, View, ArrowLeft } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import {
   approveExemption,
   listExemptionApplications,
   rejectExemption
 } from '@/api/exemption'
+
+const router = useRouter()
+const goBack = () => router.push('/teacher/dashboard')
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -451,8 +458,29 @@ onBeforeUnmount(() => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 24px;
-  min-height: calc(100vh - 56px);
+  min-height: 100vh;
   background: var(--xy-gradient-page);
+}
+
+/* ── 独立页自带返回按钮（本页已隐藏教师端公共导航） ── */
+.hero-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px 5px 8px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.hero-back:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.55);
 }
 
 /* ── 工作台横幅：本页独立 UI ── */
