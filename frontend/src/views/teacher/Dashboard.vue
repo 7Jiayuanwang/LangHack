@@ -647,26 +647,39 @@ onMounted(() => {
     padding: 16px;
   }
 
+  /* 窄屏压缩统计卡：保持横排、缩小图标与字号，保证免修审批入口首屏可见 */
+  .stat-card {
+    margin-bottom: 12px;
+    --el-card-padding: 10px 8px;
+  }
+
   .stat-content {
-    flex-direction: column;
-    text-align: center;
+    flex-direction: row;
+    text-align: left;
+    padding: 0;
   }
 
   .stat-icon {
-    margin-right: 0;
-    margin-bottom: 12px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    margin-right: 10px;
+    margin-bottom: 0;
+    font-size: 18px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   }
 
   .stat-info h3 {
-    font-size: 28px;
+    font-size: 20px;
+  }
+
+  .stat-info p {
+    margin-top: 2px;
+    font-size: 12px;
   }
 
   .mt-20 {
     margin-top: 16px;
-  }
-
-  .stat-card {
-    margin-bottom: 16px;
   }
 }
 </style>
