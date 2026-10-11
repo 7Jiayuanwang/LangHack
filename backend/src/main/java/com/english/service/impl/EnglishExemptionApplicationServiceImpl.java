@@ -24,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -141,6 +143,8 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
     }
 
     private List<User> findReviewers(User student) {
+        Map<Long, User> reviewersById = new LinkedHashMap<>();
+
         String schoolStudentId = resolveSchoolStudentId(student);
         Set<String> teacherWorkIds = teacherStudentBindingMapper.selectByStudent(schoolStudentId, null, null).stream()
                 .map(TeacherStudentBinding::getTeacherId)
@@ -153,22 +157,28 @@ public class EnglishExemptionApplicationServiceImpl implements EnglishExemptionA
                     .in(User::getUsername, teacherWorkIds)
                     .eq(User::getRole, "TEACHER")
                     .eq(User::getStatus, "ACTIVE"));
-            if (!boundTeachers.isEmpty()) {
-                return boundTeachers;
-            }
+            boundTeachers.stream()
+                    .filter(Objects::nonNull)
+                    .filter(teacher -> teacher.getId() != null)
+                    .forEach(teacher -> reviewersById.putIfAbsent(teacher.getId(), teacher));
         }
 
         Set<Long> teacherIds = classService.getClassesByStudentId(student.getId()).stream()
                 .map(Class::getTeacherId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (teacherIds.isEmpty()) {
-            return List.of();
+        if (!teacherIds.isEmpty()) {
+            List<User> classTeachers = userMapper.selectList(new LambdaQueryWrapper<User>()
+                    .in(User::getId, teacherIds)
+                    .eq(User::getRole, "TEACHER")
+                    .eq(User::getStatus, "ACTIVE"));
+            classTeachers.stream()
+                    .filter(Objects::nonNull)
+                    .filter(teacher -> teacher.getId() != null)
+                    .forEach(teacher -> reviewersById.putIfAbsent(teacher.getId(), teacher));
         }
-        return userMapper.selectList(new LambdaQueryWrapper<User>()
-                .in(User::getId, teacherIds)
-                .eq(User::getRole, "TEACHER")
-                .eq(User::getStatus, "ACTIVE"));
+
+        return List.copyOf(reviewersById.values());
     }
 
     private String resolveSchoolStudentId(User student) {

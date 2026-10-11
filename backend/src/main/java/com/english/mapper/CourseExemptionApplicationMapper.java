@@ -28,8 +28,12 @@ public interface CourseExemptionApplicationMapper extends BaseMapper<CourseExemp
             " JOIN users u ON u.id = a.student_id" +
             " <where>" +
             "  <if test='status != null and status != &quot;&quot;'> AND a.status = #{status} </if>" +
-            "  AND EXISTS (SELECT 1 FROM course_exemption_reviewer r" +
+            "  AND (EXISTS (SELECT 1 FROM course_exemption_reviewer r" +
             "       WHERE r.application_id = a.id AND r.teacher_id = #{teacherId})" +
+            "   OR EXISTS (SELECT 1 FROM student_classes sc" +
+            "       JOIN classes c ON c.id = sc.class_id AND c.deleted = 0" +
+            "       WHERE sc.student_id = a.student_id AND sc.status = 'ACTIVE'" +
+            "         AND c.teacher_id = #{teacherId}))" +
             " </where>" +
             " ORDER BY a.created_time DESC, a.id DESC" +
             "</script>")
@@ -40,15 +44,23 @@ public interface CourseExemptionApplicationMapper extends BaseMapper<CourseExemp
 
     @Select("SELECT COUNT(*) FROM course_exemption_application a " +
             "WHERE (#{status} = '' OR a.status = #{status}) AND " +
-            "EXISTS (SELECT 1 FROM course_exemption_reviewer r " +
-            "WHERE r.application_id = a.id AND r.teacher_id = #{teacherId})")
+            "(EXISTS (SELECT 1 FROM course_exemption_reviewer r " +
+            "WHERE r.application_id = a.id AND r.teacher_id = #{teacherId}) OR " +
+            "EXISTS (SELECT 1 FROM student_classes sc JOIN classes c " +
+            "ON c.id = sc.class_id AND c.deleted = 0 " +
+            "WHERE sc.student_id = a.student_id AND sc.status = 'ACTIVE' " +
+            "AND c.teacher_id = #{teacherId}))")
     long countAccessible(@Param("status") String status,
                          @Param("teacherId") Long teacherId,
                          @Param("teacherUsername") String teacherUsername);
 
     @Select("SELECT a.* FROM course_exemption_application a " +
-            "WHERE a.id = #{id} AND EXISTS (SELECT 1 FROM course_exemption_reviewer r " +
-            "WHERE r.application_id = a.id AND r.teacher_id = #{teacherId})")
+            "WHERE a.id = #{id} AND (EXISTS (SELECT 1 FROM course_exemption_reviewer r " +
+            "WHERE r.application_id = a.id AND r.teacher_id = #{teacherId}) OR " +
+            "EXISTS (SELECT 1 FROM student_classes sc JOIN classes c " +
+            "ON c.id = sc.class_id AND c.deleted = 0 " +
+            "WHERE sc.student_id = a.student_id AND sc.status = 'ACTIVE' " +
+            "AND c.teacher_id = #{teacherId}))")
     CourseExemptionApplication selectAccessibleById(@Param("id") Long id,
                                                      @Param("teacherId") Long teacherId,
                                                      @Param("teacherUsername") String teacherUsername);
