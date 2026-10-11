@@ -331,6 +331,8 @@ const filterForm = reactive({
 const assignmentForm = reactive({
   id: null,
   title: '',
+  // Keep the legacy singular field for callers/tests while classIds drives the multi-class form.
+  classId: null,
   classIds: [],
   unitId: null,
   assignmentType: 'UNIT',
@@ -563,6 +565,7 @@ const editAssignment = async (assignment) => {
   Object.assign(assignmentForm, {
     id: assignment.id,
     title: assignment.title,
+    classId: assignment.classId || null,
     classIds: assignment.classId ? [assignment.classId] : [],
     unitId: assignment.unitId,
     assignmentType: assignment.assignmentType || 'UNIT',
@@ -581,6 +584,7 @@ const resetAssignmentForm = () => {
   Object.assign(assignmentForm, {
     id: null,
     title: '',
+    classId: null,
     classIds: [],
     unitId: null,
     assignmentType: 'UNIT',

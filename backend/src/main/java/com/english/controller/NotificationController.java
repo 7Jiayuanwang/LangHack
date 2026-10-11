@@ -90,7 +90,9 @@ public class NotificationController {
     public Result<List<Notification>> getAllNotifications() {
         try {
             List<Notification> list = notificationMapper.selectList(
-                new LambdaQueryWrapper<Notification>().orderByDesc(Notification::getCreatedAt)
+                new LambdaQueryWrapper<Notification>()
+                    .isNull(Notification::getTargetUserId)
+                    .orderByDesc(Notification::getCreatedAt)
             );
             list.forEach(n -> {
                 User creator = userService.getUserById(n.getCreatedBy());
@@ -116,8 +118,10 @@ public class NotificationController {
             String userRole = currentUser.getRole();
             LambdaQueryWrapper<Notification> query = new LambdaQueryWrapper<Notification>()
                 .eq(Notification::getIsActive, true)
-                .and(w -> w.eq(Notification::getTargetRole, "ALL")
-                    .or().eq(Notification::getTargetRole, userRole))
+                .and(w -> w.eq(Notification::getTargetUserId, currentUser.getId())
+                    .or(target -> target.isNull(Notification::getTargetUserId)
+                        .and(role -> role.eq(Notification::getTargetRole, "ALL")
+                            .or().eq(Notification::getTargetRole, userRole))))
                 .orderByDesc(Notification::getCreatedAt);
 
             List<Notification> allNotifications = notificationMapper.selectList(query);
@@ -143,6 +147,11 @@ public class NotificationController {
             User currentUser = getCurrentUser();
             if (currentUser == null) {
                 return Result.error(401, "未登录");
+            }
+
+            Notification notification = notificationMapper.selectById(id);
+            if (notification == null || !canRead(notification, currentUser)) {
+                return Result.error(404, "通知不存在");
             }
 
             Long count = notificationReadMapper.selectCount(
@@ -172,5 +181,13 @@ public class NotificationController {
             return null;
         }
         return userService.getUserByUsername(auth.getName());
+    }
+
+    private boolean canRead(Notification notification, User user) {
+        if (notification.getTargetUserId() != null) {
+            return notification.getTargetUserId().equals(user.getId());
+        }
+        return "ALL".equals(notification.getTargetRole())
+            || notification.getTargetRole().equals(user.getRole());
     }
 }

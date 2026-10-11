@@ -771,3 +771,20 @@ export function recordExternalFeedbackClick() {
     method: 'post'
   }).catch(() => {})
 }
+
+// ========== 英语免修申请 ==========
+
+export function getMyEnglishExemptionApplication() {
+  return request({
+    url: '/api/student/english-exemptions/me',
+    method: 'get'
+  })
+}
+
+export function submitEnglishExemptionApplication(data) {
+  return request({
+    url: '/api/student/english-exemptions',
+    method: 'post',
+    data
+  })
+}

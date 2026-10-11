@@ -226,6 +226,13 @@ describe('MobileLayout — 用户菜单', () => {
     expect(wrapper.vm.showUserMenu).toBe(false)
   })
 
+  it('[STUDENT] 英语免修菜单项跳转到英语免修页', async () => {
+    mockUserStore({ userRole: 'STUDENT' })
+    const wrapper = shallowMount(StudentLayout, mountOptions())
+    await wrapper.vm.handleUserAction('english-exemption')
+    expect(mockRouterPush).toHaveBeenCalledWith('/student/english-exemption')
+  })
+
   it('[USER] handleCommand 方法存在（Element Plus dropdown）', () => {
     mockUserStore({ userRole: 'USER' })
     const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'user' } })

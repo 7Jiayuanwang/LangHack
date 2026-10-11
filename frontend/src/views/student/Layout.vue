@@ -62,6 +62,13 @@
             </svg>
             我的画像
           </button>
+          <button class="simple-btn" @click="handleUserAction('english-exemption')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 12l2 2 4-4"/>
+              <path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/>
+            </svg>
+            英语免修
+          </button>
           <button v-if="userStore.userInfo?.id" class="simple-btn" @click="handleUserAction('author-home')">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="8" r="4"/>
@@ -265,6 +272,9 @@ const handleUserAction = async (action) => {
       break
     case 'profile':
       router.push('/student/my-profile')
+      break
+    case 'english-exemption':
+      router.push('/student/english-exemption')
       break
     case 'author-home':
       if (userStore.userInfo?.id) {

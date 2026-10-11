@@ -533,6 +533,12 @@ const routes = [
         meta: { title: "我的收藏", roles: ["STUDENT", "USER"] },
       },
       {
+        path: "english-exemption",
+        name: "StudentEnglishExemption",
+        component: () => import("@/views/student/EnglishExemption.vue"),
+        meta: { title: "英语免修", roles: ["STUDENT", "USER"] },
+      },
+      {
         path: "schedule",
         name: "StudentSchedule",
         component: () => import("@/views/student/Schedule.vue"),
