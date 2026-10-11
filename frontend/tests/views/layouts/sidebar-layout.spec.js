@@ -142,11 +142,12 @@ describe('SidebarLayout — 导航项（各角色不同）', () => {
     expect(paths).toContain('/admin/assignments')
   })
 
-  it('[TEACHER] navItems 包含 dashboard、my-courses、my-students、my-schedule', () => {
+  it('[TEACHER] navItems 包含 dashboard、免修审批、my-courses、my-students、my-schedule', () => {
     mockUserStore({ userRole: "TEACHER" })
     const wrapper = shallowMount(MobileLayout, { ...mountOptions(), props: { role: 'teacher' } })
     const paths = wrapper.vm.navItems.map(i => i.path)
     expect(paths).toContain('/teacher/dashboard')
+    expect(paths).toContain('/teacher/exemption-approvals')
     expect(paths).toContain('/teacher/my-courses')
     expect(paths).toContain('/teacher/my-students')
     expect(paths).toContain('/teacher/my-schedule')

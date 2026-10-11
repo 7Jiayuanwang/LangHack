@@ -6,11 +6,14 @@ const MAX_VIDEO_SIZE = 512 * 1024 * 1024  // 512 MB
 
 // 允许的文件类型（兼容浏览器对 .mp3 返回 audio/mpeg / audio/mp3 / 空字符串三种情况）
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+const ALLOWED_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp']
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg']
 const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/mpga', 'audio/wav', 'audio/wave', 'audio/x-wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/aac']
 // 扩展名白名单，作为 file.type 缺失或非标准时的兜底判断
 const ALLOWED_AUDIO_EXTS = ['mp3', 'wav', 'ogg', 'webm', 'mp4', 'm4a', 'aac']
 const ALLOWED_DOCUMENT_TYPES = ['application/pdf']
+const ALLOWED_DOCUMENT_EXTS = ['pdf']
+const GENERIC_BINARY_TYPES = ['', 'application/octet-stream', 'application/x-pdf']
 
 /**
  * 验证文件是否满足上传要求
@@ -42,6 +45,18 @@ function validateFile(file, mediaType) {
     if (!ALLOWED_AUDIO_EXTS.includes(ext)) {
       const typeList = allowedTypes.join(', ')
       return `不支持的文件类型，仅支持: ${typeList}`
+    }
+  } else if (mediaType === 'DOCUMENT') {
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    if (!ALLOWED_DOCUMENT_EXTS.includes(ext) ||
+        (!allowedTypes.includes(file.type) && !GENERIC_BINARY_TYPES.includes(file.type || ''))) {
+      return '不支持的文件类型，仅支持: ' + allowedTypes.join(', ')
+    }
+  } else if (mediaType === 'IMAGE') {
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    if (!ALLOWED_IMAGE_EXTS.includes(ext) ||
+        (!allowedTypes.includes(file.type) && !GENERIC_BINARY_TYPES.includes(file.type || ''))) {
+      return '不支持的文件类型，仅支持: ' + allowedTypes.join(', ')
     }
   } else if (!allowedTypes.includes(file.type)) {
     const typeList = allowedTypes.join(', ')

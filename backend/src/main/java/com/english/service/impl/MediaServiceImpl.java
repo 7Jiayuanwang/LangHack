@@ -191,11 +191,11 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
 
     private boolean isValidMediaType(String mediaType, String mimeType, String fileName) {
         if ("IMAGE".equals(mediaType)) {
-            if (!(mimeType != null && mimeType.startsWith("image/"))) {
-                return false;
-            }
             String ext = getFileExtension(fileName).toLowerCase();
-            return !ext.isEmpty() && ALLOWED_IMAGE_EXTENSIONS.contains(ext);
+            boolean supportedImageMime = mimeType == null || mimeType.isBlank()
+                    || mimeType.toLowerCase().startsWith("image/")
+                    || "application/octet-stream".equalsIgnoreCase(mimeType);
+            return supportedImageMime && !ext.isEmpty() && ALLOWED_IMAGE_EXTENSIONS.contains(ext);
         } else if ("VIDEO".equals(mediaType)) {
             if (!(mimeType != null && mimeType.startsWith("video/"))) {
                 return false;
@@ -209,7 +209,11 @@ public class MediaServiceImpl extends ServiceImpl<MediaMapper, Media> implements
             return !ext.isEmpty() && ALLOWED_AUDIO_EXTENSIONS.contains(ext);
         } else if ("DOCUMENT".equals(mediaType)) {
             String ext = getFileExtension(fileName).toLowerCase();
-            return "application/pdf".equals(mimeType) && ALLOWED_DOCUMENT_EXTENSIONS.contains(ext);
+            boolean supportedPdfMime = mimeType == null || mimeType.isBlank()
+                    || "application/pdf".equalsIgnoreCase(mimeType)
+                    || "application/octet-stream".equalsIgnoreCase(mimeType)
+                    || "application/x-pdf".equalsIgnoreCase(mimeType);
+            return supportedPdfMime && ALLOWED_DOCUMENT_EXTENSIONS.contains(ext);
         }
         return false;
     }

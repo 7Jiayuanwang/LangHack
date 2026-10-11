@@ -126,7 +126,9 @@
         INNER JOIN student_classes sc ON c.id = sc.class_id
         LEFT JOIN courses co ON c.course_id = co.id AND co.deleted = 0
         LEFT JOIN users u ON c.teacher_id = u.id AND u.deleted = 0
-        WHERE sc.student_id = #{studentId} AND c.deleted = 0
+        WHERE sc.student_id = #{studentId}
+          AND sc.status = 'ACTIVE'
+          AND c.deleted = 0
         ORDER BY sc.join_time DESC
     </select>
 

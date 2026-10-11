@@ -1,6 +1,7 @@
 package com.english.service;
 
 import com.english.dto.EnglishExemptionApplicationRequest;
+import com.english.entity.Class;
 import com.english.entity.CourseExemptionApplication;
 import com.english.entity.CourseExemptionReviewer;
 import com.english.entity.Notification;
@@ -22,14 +23,18 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,55 +52,108 @@ class EnglishExemptionApplicationServiceImplTest {
     @InjectMocks private EnglishExemptionApplicationServiceImpl service;
 
     @Test
-    void submitPersistsApplicationAndNotifiesBoundTeacher() {
+    void submitWithOnlyTeacherStudentBindingNotifiesBoundTeacher() {
         User student = user(10L, "2023122066164", "STUDENT");
         User teacher = user(20L, "teacher-001", "TEACHER");
         TeacherStudentBinding binding = new TeacherStudentBinding();
-        binding.setTeacherId("teacher-001");
-        EnglishExemptionApplicationRequest request = new EnglishExemptionApplicationRequest();
-        fillRequest(request);
+        binding.setTeacherId(teacher.getUsername());
 
-        when(applicationMapper.selectCount(any())).thenReturn(0L);
-        when(teacherStudentBindingMapper.selectByStudent(eq("2023122066164"), isNull(), isNull()))
+        prepareCommonSubmit(101L);
+        when(teacherStudentBindingMapper.selectByStudent(eq(student.getUsername()), isNull(), isNull()))
                 .thenReturn(List.of(binding));
+        when(classService.getClassesByStudentId(student.getId())).thenReturn(List.of());
         when(userMapper.selectList(any())).thenReturn(List.of(teacher));
-        doAnswer(invocation -> {
-            CourseExemptionApplication application = invocation.getArgument(0);
-            application.setId(101L);
-            return 1;
-        }).when(applicationMapper).insert(any(CourseExemptionApplication.class));
 
-        CourseExemptionApplication submitted = service.submit(student, request);
+        CourseExemptionApplication submitted = service.submit(student, request());
 
         assertEquals(101L, submitted.getId());
-        assertEquals("PENDING", submitted.getStatus());
-        ArgumentCaptor<CourseExemptionReviewer> reviewerCaptor = ArgumentCaptor.forClass(CourseExemptionReviewer.class);
-        verify(reviewerMapper).insert(reviewerCaptor.capture());
-        assertEquals(101L, reviewerCaptor.getValue().getApplicationId());
-        assertEquals(teacher.getId(), reviewerCaptor.getValue().getTeacherId());
-        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationMapper).insert(notificationCaptor.capture());
-        Notification notification = notificationCaptor.getValue();
-        assertEquals(teacher.getId(), notification.getTargetUserId());
-        assertEquals("TEACHER", notification.getTargetRole());
-        assertEquals("英语免修申请待审核", notification.getTitle());
+        assertEquals(CourseExemptionApplication.STATUS_PENDING, submitted.getStatus());
+        assertReviewersAndNotifications(Set.of(teacher.getId()));
+    }
+
+    @Test
+    void submitWithOnlyPlatformClassTeacherNotifiesClassTeacher() {
+        User student = user(10L, "2023122066164", "STUDENT");
+        User classTeacher = user(30L, "teacher-030", "TEACHER");
+
+        prepareCommonSubmit(102L);
+        when(teacherStudentBindingMapper.selectByStudent(eq(student.getUsername()), isNull(), isNull()))
+                .thenReturn(List.of());
+        when(classService.getClassesByStudentId(student.getId()))
+                .thenReturn(List.of(studentClass(533L, classTeacher.getId())));
+        when(userMapper.selectList(any())).thenReturn(List.of(classTeacher));
+
+        service.submit(student, request());
+
+        assertReviewersAndNotifications(Set.of(classTeacher.getId()));
+    }
+
+    @Test
+    void submitWithBindingAndPlatformTeachersUsesUnionAndDeduplicates() {
+        User student = user(10L, "2023122066164", "STUDENT");
+        User sharedTeacher = user(20L, "teacher-001", "TEACHER");
+        User classOnlyTeacher = user(30L, "teacher-030", "TEACHER");
+        TeacherStudentBinding binding = new TeacherStudentBinding();
+        binding.setTeacherId(sharedTeacher.getUsername());
+
+        prepareCommonSubmit(103L);
+        when(teacherStudentBindingMapper.selectByStudent(eq(student.getUsername()), isNull(), isNull()))
+                .thenReturn(List.of(binding));
+        when(classService.getClassesByStudentId(student.getId())).thenReturn(List.of(
+                studentClass(533L, sharedTeacher.getId()),
+                studentClass(534L, classOnlyTeacher.getId())));
+        when(userMapper.selectList(any()))
+                .thenReturn(List.of(sharedTeacher))
+                .thenReturn(List.of(sharedTeacher, classOnlyTeacher));
+
+        service.submit(student, request());
+
+        assertReviewersAndNotifications(Set.of(sharedTeacher.getId(), classOnlyTeacher.getId()));
     }
 
     @Test
     void submitRejectsWhenNoTeacherCanReview() {
         User student = user(10L, "2023122066164", "STUDENT");
-        EnglishExemptionApplicationRequest request = new EnglishExemptionApplicationRequest();
-        fillRequest(request);
-
         when(applicationMapper.selectCount(any())).thenReturn(0L);
-        when(teacherStudentBindingMapper.selectByStudent(eq("2023122066164"), isNull(), isNull()))
+        when(teacherStudentBindingMapper.selectByStudent(eq(student.getUsername()), isNull(), isNull()))
                 .thenReturn(List.of());
         when(classService.getClassesByStudentId(student.getId())).thenReturn(List.of());
 
-        assertThrows(BusinessException.class, () -> service.submit(student, request));
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> service.submit(student, request()));
+
+        assertTrue(exception.getMessage().contains("未找到可审核该申请的任课教师"));
         verify(applicationMapper, never()).insert(any(CourseExemptionApplication.class));
         verify(reviewerMapper, never()).insert(any(CourseExemptionReviewer.class));
         verify(notificationMapper, never()).insert(any(Notification.class));
+    }
+
+    private void prepareCommonSubmit(Long applicationId) {
+        when(applicationMapper.selectCount(any())).thenReturn(0L);
+        doAnswer(invocation -> {
+            CourseExemptionApplication application = invocation.getArgument(0);
+            application.setId(applicationId);
+            return 1;
+        }).when(applicationMapper).insert(any(CourseExemptionApplication.class));
+    }
+
+    private void assertReviewersAndNotifications(Set<Long> expectedTeacherIds) {
+        ArgumentCaptor<CourseExemptionReviewer> reviewerCaptor =
+                ArgumentCaptor.forClass(CourseExemptionReviewer.class);
+        verify(reviewerMapper, times(expectedTeacherIds.size())).insert(reviewerCaptor.capture());
+        Set<Long> actualReviewerIds = reviewerCaptor.getAllValues().stream()
+                .map(CourseExemptionReviewer::getTeacherId)
+                .collect(Collectors.toSet());
+        assertEquals(expectedTeacherIds, actualReviewerIds);
+
+        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationMapper, times(expectedTeacherIds.size())).insert(notificationCaptor.capture());
+        Set<Long> notifiedTeacherIds = notificationCaptor.getAllValues().stream()
+                .map(Notification::getTargetUserId)
+                .collect(Collectors.toSet());
+        assertEquals(expectedTeacherIds, notifiedTeacherIds);
+        assertTrue(notificationCaptor.getAllValues().stream()
+                .allMatch(notification -> "TEACHER".equals(notification.getTargetRole())));
     }
 
     private User user(Long id, String username, String role) {
@@ -107,12 +165,21 @@ class EnglishExemptionApplicationServiceImplTest {
         return user;
     }
 
-    private void fillRequest(EnglishExemptionApplicationRequest request) {
+    private Class studentClass(Long id, Long teacherId) {
+        Class studentClass = new Class();
+        studentClass.setId(id);
+        studentClass.setTeacherId(teacherId);
+        return studentClass;
+    }
+
+    private EnglishExemptionApplicationRequest request() {
+        EnglishExemptionApplicationRequest request = new EnglishExemptionApplicationRequest();
         request.setCourseName("大学英语2");
         request.setApplyType(CourseExemptionApplication.APPLY_EXEMPT_FULL);
         request.setExamType(CourseExemptionApplication.EXAM_CET6);
         request.setExamScore("500");
         request.setCertificateUrl("/api/media/1/download");
         request.setStudentRemark("CET-6 成绩符合学院免修要求");
+        return request;
     }
 }

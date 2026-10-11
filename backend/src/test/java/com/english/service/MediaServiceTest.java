@@ -109,6 +109,42 @@ public class MediaServiceTest {
         verify(mediaMapper, times(1)).insert(any(Media.class));
     }
 
+    @Test
+    public void testUploadMedia_pdfWithGenericMime_success() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "cet-score.pdf",
+            "application/octet-stream",
+            "%PDF-1.7".getBytes(StandardCharsets.UTF_8)
+        );
+        when(mediaMapper.insert(any(Media.class))).thenReturn(1);
+
+        Media result = mediaService.uploadMedia(file, "DOCUMENT", 1L);
+
+        assertNotNull(result);
+        assertEquals("DOCUMENT", result.getMediaType());
+        assertEquals("cet-score.pdf", result.getFileName());
+        verify(mediaMapper).insert(any(Media.class));
+    }
+
+    @Test
+    public void testUploadMedia_imageWithGenericMime_success() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "cet-score.jpg",
+            "application/octet-stream",
+            new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}
+        );
+        when(mediaMapper.insert(any(Media.class))).thenReturn(1);
+
+        Media result = mediaService.uploadMedia(file, "IMAGE", 1L);
+
+        assertNotNull(result);
+        assertEquals("IMAGE", result.getMediaType());
+        assertEquals("cet-score.jpg", result.getFileName());
+        verify(mediaMapper).insert(any(Media.class));
+    }
+
     /**
      * 测试: 拒绝上传 SVG 文件（安全修复验证）
      * 期望: 抛出异常，因为 SVG 不在白名单中
