@@ -330,6 +330,12 @@ const routes = [
         meta: { title: "仪表盘", roles: ["TEACHER"] },
       },
       {
+        path: "exemption-approvals",
+        name: "TeacherExemptionApprovals",
+        component: () => import("@/views/teacher/ExemptionApprovals.vue"),
+        meta: { title: "免修审批", roles: ["TEACHER"] },
+      },
+      {
         path: "classes",
         name: "TeacherClasses",
         component: () => import("@/views/teacher/Classes.vue"),
